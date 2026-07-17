@@ -1,0 +1,15 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+secrets/
+*.token
+*.pem
+
+# Local user data and generated artifacts
+.local/
+data/
+output/
+__pycache__/
+.pytest_cache/
+.DS_Store
