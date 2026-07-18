@@ -11,7 +11,12 @@ from .config import DEFAULT_CONFIG, load_config
 from .integrations.obsidian import import_markdown_evidence
 from .integrations.zoho import ingest_fixture
 from .integrations.zoho_live import fetch_inbox_metadata, sync_metadata
-from .resume import create_job_package, create_resume_proposal, validate_latex_proposal
+from .resume import (
+    create_job_package,
+    create_resume_proposal,
+    create_section_resume_proposal,
+    validate_latex_proposal,
+)
 from .resume_settings import as_json as resume_settings_as_json
 from .resume_settings import update_settings
 from .store import PipelineStore
@@ -95,6 +100,14 @@ def _parser() -> argparse.ArgumentParser:
     resume_propose.add_argument("--output-dir", type=Path, required=True)
     resume_propose.add_argument("--latex-snippet", required=True)
     resume_propose.add_argument("--evidence-id", action="append", default=[])
+    resume_tailor = resume_commands.add_parser(
+        "tailor", help="create a section-only reviewable proposal"
+    )
+    _config_argument(resume_tailor)
+    resume_tailor.add_argument("--section", required=True)
+    resume_tailor.add_argument("--latex-content", required=True)
+    resume_tailor.add_argument("--output-dir", type=Path, required=True)
+    resume_tailor.add_argument("--evidence-id", action="append", default=[])
     resume_validate = resume_commands.add_parser(
         "validate",
         help="compile an explicitly selected local proposal without remote synchronization",
@@ -251,6 +264,21 @@ def main(arguments: Sequence[str] | None = None) -> int:
             job_url=args.job_url,
         )
         _print_json(asdict(package))
+        return 0
+    if args.command == "resume" and args.resume_command == "tailor":
+        settings = load_config(args.config).resume
+        if settings.template_path is None:
+            raise ValueError("resume template_path must be configured before tailoring")
+        if args.section.casefold() not in {item.casefold() for item in settings.editable_sections}:
+            raise ValueError("requested section is not configured as editable")
+        proposal = create_section_resume_proposal(
+            resume_path=settings.template_path,
+            output_dir=args.output_dir,
+            section_name=args.section,
+            latex_content=args.latex_content,
+            evidence=store.approved_evidence(args.evidence_id),
+        )
+        _print_json(asdict(proposal))
         return 0
     if args.command == "resume" and args.resume_command == "propose":
         proposal = create_resume_proposal(

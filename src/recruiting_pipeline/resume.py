@@ -33,6 +33,20 @@ class ResumePackage:
 
 
 _SAFE_PATH_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+_SECTION_HEADING = re.compile(r"^\\section\{(?P<name>[^}]+)\}\s*$", re.MULTILINE)
+
+
+def replace_section_contents(source: str, section_name: str, replacement: str) -> str:
+    """Replace exactly one top-level LaTex section body without touching other sections."""
+    matches = [
+        match for match in _SECTION_HEADING.finditer(source) if match.group("name") == section_name
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one section named {section_name!r}")
+    start = matches[0].end()
+    following = _SECTION_HEADING.search(source, start)
+    end = following.start() if following else len(source)
+    return source[:start].rstrip() + "\n" + replacement.strip() + "\n" + source[end:]
 
 
 def _safe_path_component(value: str) -> str:
@@ -81,6 +95,59 @@ def create_job_package(
 
 
 _DISALLOWED_LATEX = ("\\input", "\\include", "\\write18", "\\immediate\\write")
+
+
+def create_section_resume_proposal(
+    *,
+    resume_path: Path,
+    output_dir: Path,
+    section_name: str,
+    latex_content: str,
+    evidence: list[Evidence],
+) -> ResumeProposal:
+    """Create a section-only proposal. The source template is never modified."""
+    if resume_path.suffix.lower() != ".tex":
+        raise ValueError("resume_path must point to a .tex file")
+    if not evidence or any(not item.approved for item in evidence):
+        raise ValueError("a resume proposal requires approved evidence")
+    if any(marker in latex_content for marker in _DISALLOWED_LATEX):
+        raise ValueError("latex_content contains a disallowed file or shell command")
+    original = resume_path.read_text(encoding="utf-8")
+    proposed = replace_section_contents(original, section_name, latex_content)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    proposed_tex_path = output_dir / "proposal.tex"
+    diff_path = output_dir / "proposal.diff"
+    claim_report_path = output_dir / "claim-report.json"
+    proposed_tex_path.write_text(proposed, encoding="utf-8")
+    diff_path.write_text(
+        "".join(
+            difflib.unified_diff(
+                original.splitlines(keepends=True),
+                proposed.splitlines(keepends=True),
+                fromfile=str(resume_path),
+                tofile=str(proposed_tex_path),
+            )
+        ),
+        encoding="utf-8",
+    )
+    claim_report_path.write_text(
+        json.dumps(
+            {
+                "approved_evidence": [
+                    {"id": item.id, "source_ref": item.source_ref, "text": item.text}
+                    for item in evidence
+                ],
+                "edited_section": section_name,
+                "external_sync": "not performed",
+                "source_modified": False,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ResumeProposal(proposed_tex_path, diff_path, claim_report_path)
 
 
 def create_resume_proposal(
