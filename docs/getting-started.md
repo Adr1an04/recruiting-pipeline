@@ -61,7 +61,7 @@ uv run recruiting-pipeline zoho ingest-fixture \
 
 ## 4. Connect Zoho Mail (read-only)
 
-The live connector uses Zoho's **Mobile-based application** OAuth type, Authorization Code + PKCE, a fixed local redirect URI, and macOS Keychain. It requests only `ZohoMail.messages.READ`; messages are not writable.
+The live connector uses Zoho's **Mobile-based application** OAuth type, Authorization Code + PKCE, a fixed local redirect URI, and macOS Keychain. It requests only the read-only `ZohoMail.messages.READ`, `ZohoMail.folders.READ`, and `ZohoMail.accounts.READ` scopes; messages are not writable.
 
 1. In Zoho API Console, create a Mobile-based application and register exactly `http://127.0.0.1:8765/callback` as its redirect URI.
 2. Copy the client ID (not a secret). Store the client secret locally without displaying it using:

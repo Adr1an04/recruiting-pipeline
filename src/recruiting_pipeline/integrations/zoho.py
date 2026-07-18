@@ -33,7 +33,9 @@ class ReadOnlyMailSource(Protocol):
         raise NotImplementedError
 
 
-_ALLOWED_READ_ONLY_SCOPES = frozenset({"ZohoMail.messages.READ", "ZohoMail.accounts.READ"})
+_ALLOWED_READ_ONLY_SCOPES = frozenset(
+    {"ZohoMail.messages.READ", "ZohoMail.folders.READ", "ZohoMail.accounts.READ"}
+)
 
 
 def validate_read_only_scopes(scopes: Sequence[str]) -> tuple[str, ...]:

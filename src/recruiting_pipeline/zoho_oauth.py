@@ -11,7 +11,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
-READ_ONLY_SCOPES = ("ZohoMail.messages.READ", "ZohoMail.accounts.READ")
+READ_ONLY_SCOPES = (
+    "ZohoMail.messages.READ",
+    "ZohoMail.folders.READ",
+    "ZohoMail.accounts.READ",
+)
 
 
 def pkce_challenge(code_verifier: str) -> str:
