@@ -17,6 +17,12 @@ _DENIAL_MARKERS = (
     "other candidates",
     "unfortunately",
 )
+_ASSESSMENT_MARKERS = (
+    "hackerrank",
+    "coding test",
+    "online assessment",
+    "assessment invitation",
+)
 _ACKNOWLEDGEMENT_MARKERS = (
     "we received your application",
     "application received",
@@ -30,6 +36,8 @@ def classify_application_message(*, subject: str, preview: str) -> Classificatio
     content = f"{subject}\n{preview}".casefold()
     if any(marker in content for marker in _DENIAL_MARKERS):
         return Classification(kind="denial", confidence=0.95, requires_review=True)
+    if any(marker in content for marker in _ASSESSMENT_MARKERS):
+        return Classification(kind="assessment", confidence=0.98, requires_review=True)
     if any(marker in content for marker in _ACKNOWLEDGEMENT_MARKERS):
         return Classification(kind="acknowledgement", confidence=0.9, requires_review=False)
     return Classification(kind="unknown", confidence=0.0, requires_review=True)
