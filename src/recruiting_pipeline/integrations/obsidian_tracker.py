@@ -12,7 +12,7 @@ def _safe_name(value: str) -> str:
 
 def write_job_tracker_note(
     *,
-    vault_path: Path,
+    tracker_dir: Path,
     cycle: str,
     company: str,
     role: str,
@@ -24,7 +24,7 @@ def write_job_tracker_note(
     if not job_url.startswith(("https://", "http://")):
         raise ValueError("job URL must use HTTP(S)")
     safe_company, safe_role = _safe_name(company), _safe_name(role)
-    notes_dir = vault_path / "02 Projects" / "Job Applications"
+    notes_dir = tracker_dir.expanduser().resolve()
     notes_dir.mkdir(parents=True, exist_ok=True)
     note_path = notes_dir / f"{safe_company} — {safe_role}.md"
     if note_path.exists():

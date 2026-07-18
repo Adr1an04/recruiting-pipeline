@@ -24,8 +24,16 @@ output_root = "output"
 latexmk = "latexmk"
 
 [mail]
-# This is a label only. OAuth consent and credentials are configured separately.
+# Provider selection is explicit; each connector is independently authorized.
+provider = "zoho"
+# Optional executable name/path for the Google Workspace CLI when provider = "gmail".
+gws_command = "gws"
 folder = "Job Applications"
+
+[tracking]
+# Optional Markdown/Obsidian tracker. Keep disabled when no tracker provider is wanted.
+enabled = false
+tracker_dir = ""
 
 [privacy]
 # Keep full message bodies and attachments disabled unless a user explicitly enables them.
@@ -47,11 +55,20 @@ class ResumeSettings:
 
 
 @dataclass(frozen=True)
+class TrackerSettings:
+    enabled: bool
+    tracker_dir: Path | None
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     config_path: Path
     data_dir: Path
     vault_path: Path | None
     resume: ResumeSettings
+    tracker: TrackerSettings
+    mail_provider: str
+    gws_command: str
     mail_folder: str
     retain_message_bodies: bool
     retain_attachments: bool
@@ -112,17 +129,30 @@ def load_config(config_path: Path) -> PipelineConfig:
     document = tomllib.loads(config_path.read_text(encoding="utf-8"))
     paths = _section(document, "paths")
     mail = _section(document, "mail")
+    tracking = _section(document, "tracking")
     privacy = _section(document, "privacy")
 
     data_dir = _path(str(paths.get("data_dir", "state")), config_path.parent)
     vault_value = str(paths.get("vault_path", "")).strip()
     vault_path = _path(vault_value, config_path.parent) if vault_value else None
+    tracker_value = str(tracking.get("tracker_dir", "")).strip()
+    tracker_dir = _path(tracker_value, config_path.parent) if tracker_value else None
+    tracker_enabled = bool(tracking.get("enabled", False))
+    if tracker_enabled and tracker_dir is None:
+        raise ValueError("tracking tracker_dir must be configured when tracking is enabled")
+
+    mail_provider = str(mail.get("provider", "zoho")).strip().casefold()
+    if mail_provider not in {"zoho", "gmail"}:
+        raise ValueError("mail provider must be zoho or gmail")
 
     return PipelineConfig(
         config_path=config_path,
         data_dir=data_dir,
         vault_path=vault_path,
         resume=_resume_settings(document, config_path.parent),
+        tracker=TrackerSettings(enabled=tracker_enabled, tracker_dir=tracker_dir),
+        mail_provider=mail_provider,
+        gws_command=str(mail.get("gws_command", "gws")).strip() or "gws",
         mail_folder=str(mail.get("folder", "Job Applications")),
         retain_message_bodies=bool(privacy.get("retain_message_bodies", False)),
         retain_attachments=bool(privacy.get("retain_attachments", False)),

@@ -8,6 +8,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .config import DEFAULT_CONFIG, load_config
+from .doctor import check_installation
+from .integrations.gmail_live import fetch_inbox_metadata_with_gws
 from .integrations.obsidian import import_markdown_evidence
 from .integrations.zoho import ingest_fixture
 from .integrations.zoho_live import fetch_inbox_metadata, sync_metadata
@@ -50,6 +52,8 @@ def _parser() -> argparse.ArgumentParser:
 
     status = subcommands.add_parser("status", help="show local pipeline counts")
     _config_argument(status)
+    doctor = subcommands.add_parser("doctor", help="check core and optional local capabilities")
+    _config_argument(doctor)
 
     evidence = subcommands.add_parser("evidence", help="manage local evidence records")
     evidence_commands = evidence.add_subparsers(dest="evidence_command", required=True)
@@ -66,6 +70,14 @@ def _parser() -> argparse.ArgumentParser:
     )
     _config_argument(obsidian_import)
     obsidian_import.add_argument("--note", type=Path, required=True)
+
+    mail = subcommands.add_parser("mail", help="synchronize the configured read-only mail provider")
+    mail_commands = mail.add_subparsers(dest="mail_command", required=True)
+    mail_sync = mail_commands.add_parser(
+        "sync", help="read bounded metadata and update local events"
+    )
+    _config_argument(mail_sync)
+    mail_sync.add_argument("--limit", type=int, default=20)
 
     zoho = subcommands.add_parser("zoho", help="run bounded local Zoho adapter checks")
     zoho_commands = zoho.add_subparsers(dest="zoho_command", required=True)
@@ -202,6 +214,10 @@ def main(arguments: Sequence[str] | None = None) -> int:
         )
         return 0
 
+    if args.command == "doctor":
+        _print_json(asdict(check_installation(args.config)))
+        return 0
+
     store = _store_for(args.config)
     if args.command == "status":
         _print_json(
@@ -228,6 +244,26 @@ def main(arguments: Sequence[str] | None = None) -> int:
             for item in import_markdown_evidence(config.vault_path, args.note)
         ]
         _print_json([asdict(item) for item in imported])
+        return 0
+    if args.command == "mail" and args.mail_command == "sync":
+        if args.limit < 1 or args.limit > 100:
+            raise ValueError("--limit must be between 1 and 100")
+        config = load_config(args.config)
+        if config.mail_provider == "gmail":
+            messages = fetch_inbox_metadata_with_gws(
+                gws_command=config.gws_command, limit=args.limit
+            )
+        else:
+            raise ValueError(
+                "Zoho sync needs `zoho sync --client-id` until a credential backend is configured"
+            )
+        _print_json(
+            {
+                "provider": config.mail_provider,
+                "fetched": len(messages),
+                **sync_metadata(store, messages),
+            }
+        )
         return 0
     if args.command == "zoho" and args.zoho_command == "sync":
         if args.limit < 1 or args.limit > 100:

@@ -6,7 +6,15 @@ data_dir = "state"
 vault_path = ""
 
 [mail]
+# Supported read-only adapters: "zoho" and "gmail". Gmail uses an already-authenticated gws CLI.
+provider = "zoho"
+gws_command = "gws"
 folder = "Job Applications"
+
+[tracking]
+# Set enabled only when a local Markdown/Obsidian tracker directory is desired.
+enabled = false
+tracker_dir = ""
 
 [privacy]
 retain_message_bodies = false

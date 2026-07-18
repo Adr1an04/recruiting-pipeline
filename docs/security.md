@@ -16,14 +16,16 @@ The server is intentionally not a localhost HTTP service. Stdio restricts access
 
 The example configuration passes one non-secret configuration-file path only. Do not pass tokens, a home-directory path, or a broad environment through the MCP configuration. Configure only the project and pipeline paths that the server needs.
 
-The currently exposed MCP tools are read-only:
+The server declares tool annotations so MCP clients can distinguish its capability classes:
 
-- `pipeline_status`
-- `list_applications`
-- `list_evidence`
-- `list_mail_events`
+| Tools | Capability | Effect |
+| --- | --- | --- |
+| `pipeline_status`, `list_applications`, `list_evidence`, `list_mail_events` | read-only | Reads local SQLite state only. |
+| `prepare_job_workspace` | network-read + local-write | Fetches a job URL and creates configured local package/tracker artifacts. |
+| `create_tailored_resume` | local-write | Writes a reviewable proposal, diff, and claim report inside a configured package. |
+| `validate_tailored_resume` | local-exec | Runs the configured local LaTeX validator on an explicit proposal. |
 
-No MCP tool creates applications, approves evidence, edits a résumé, connects to mail, sends a message, applies to a job, or synchronizes a remote.
+No MCP tool creates remote applications, approves evidence, connects to mail, sends a message, mutates remote mail, or submits a job. Local-write and local-exec tools require explicit user approval in the invoking client.
 
 If a future MCP mutation is proposed, it needs a separate server-side authorization design, a durable audit record, a narrowly scoped command, and an explicit interactive confirmation outside untrusted imported content. Tool descriptions alone are not approval.
 

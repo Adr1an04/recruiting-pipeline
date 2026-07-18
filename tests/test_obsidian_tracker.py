@@ -12,7 +12,7 @@ class ObsidianTrackerTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             note = write_job_tracker_note(
-                vault_path=root / "vault",
+                tracker_dir=root / "tracker",
                 cycle="Fall 2026",
                 company="Example Co",
                 role="Software Engineer Intern",
@@ -24,7 +24,7 @@ class ObsidianTrackerTests(unittest.TestCase):
             self.assertEqual(
                 note,
                 write_job_tracker_note(
-                    vault_path=root / "vault",
+                    tracker_dir=root / "tracker",
                     cycle="Fall 2026",
                     company="Example Co",
                     role="Software Engineer Intern",
