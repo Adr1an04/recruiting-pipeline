@@ -25,7 +25,9 @@ class ResumeEditorTests(unittest.TestCase):
                 "\\section{Experience}\nx\n\\section{Experience}\ny\n", "Experience", "new"
             )
 
-    def test_creates_a_reviewable_section_specific_proposal(self) -> None:
+    def test_creates_a_reviewable_section_specific_proposal_without_removing_existing_content(
+        self,
+    ) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "resume.tex"
@@ -40,8 +42,10 @@ class ResumeEditorTests(unittest.TestCase):
                 evidence=[evidence],
             )
             self.assertEqual(source.read_text(encoding="utf-8"), original)
-            self.assertIn("new", proposal.proposed_tex_path.read_text(encoding="utf-8"))
-            self.assertIn("keep", proposal.proposed_tex_path.read_text(encoding="utf-8"))
+            proposed = proposal.proposed_tex_path.read_text(encoding="utf-8")
+            self.assertIn("old", proposed)
+            self.assertIn("new", proposed)
+            self.assertIn("keep", proposed)
             self.assertTrue(proposal.diff_path.exists())
             self.assertTrue(proposal.claim_report_path.exists())
 
