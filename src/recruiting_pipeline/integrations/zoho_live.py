@@ -11,10 +11,14 @@ from ..models import MailEvent
 from ..store import PipelineStore
 from .zoho import MailMessageMetadata
 
-_JOB_MARKERS = ("recruiter", "opportunity", "role", "position", "opening", "hiring")
+_JOB_MARKERS = ("recruiter", "opportunity", "position", "opening", "hiring")
+_MARKETING_MARKERS = ("free applications", "one tap", "one click", "jobbie")
 
 
 def _classify(message: MailMessageMetadata) -> tuple[str, float, bool]:
+    content = f"{message.sender}\n{message.subject}\n{message.preview}".casefold()
+    if any(marker in content for marker in _MARKETING_MARKERS):
+        return "other", 0.0, False
     application = classify_application_message(subject=message.subject, preview=message.preview)
     if application.kind != "unknown":
         return (
