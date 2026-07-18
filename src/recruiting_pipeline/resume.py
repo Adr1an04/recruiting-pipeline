@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 import subprocess
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .models import Evidence
@@ -22,6 +24,60 @@ class LatexValidation:
     returncode: int
     stdout: str
     stderr: str
+
+
+@dataclass(frozen=True)
+class ResumePackage:
+    package_dir: Path
+    manifest_path: Path
+
+
+_SAFE_PATH_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+
+def _safe_path_component(value: str) -> str:
+    if not _SAFE_PATH_COMPONENT.fullmatch(value):
+        raise ValueError("cycle and application slug must be safe path component values")
+    return value
+
+
+def create_job_package(
+    *, output_root: Path, cycle: str, application_slug: str, job_url: str
+) -> ResumePackage:
+    """Create a generic, isolated workspace before a template adapter is selected."""
+    if not job_url.startswith(("http://", "https://")):
+        raise ValueError("job_url must be an HTTP(S) URL")
+    output_root.mkdir(parents=True, exist_ok=True)
+    cycle_dir = output_root / _safe_path_component(cycle)
+    if cycle_dir.is_symlink():
+        raise ValueError("resume package directories must not be a symlink")
+    cycle_dir.mkdir(exist_ok=True)
+    package_dir = cycle_dir / _safe_path_component(application_slug)
+    if package_dir.is_symlink():
+        raise ValueError("resume package directories must not be a symlink")
+    if package_dir.exists():
+        raise FileExistsError(f"resume package already exists: {package_dir}")
+    package_dir.mkdir()
+    (package_dir / "source").mkdir()
+    (package_dir / "artifacts").mkdir()
+    (package_dir / "research").mkdir()
+    manifest_path = package_dir / "package.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "application_slug": application_slug,
+                "created_at": datetime.now(UTC).isoformat(),
+                "cycle": cycle,
+                "job_url": job_url,
+                "template_status": "not_copied",
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ResumePackage(package_dir=package_dir, manifest_path=manifest_path)
 
 
 _DISALLOWED_LATEX = ("\\input", "\\include", "\\write18", "\\immediate\\write")

@@ -9,7 +9,9 @@ from pathlib import Path
 from .config import DEFAULT_CONFIG, load_config
 from .integrations.obsidian import import_markdown_evidence
 from .integrations.zoho import ingest_fixture
-from .resume import create_resume_proposal, validate_latex_proposal
+from .resume import create_job_package, create_resume_proposal, validate_latex_proposal
+from .resume_settings import as_json as resume_settings_as_json
+from .resume_settings import update_settings
 from .store import PipelineStore
 
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "recruiting-pipeline" / "config.toml"
@@ -77,6 +79,29 @@ def _parser() -> argparse.ArgumentParser:
     _config_argument(resume_validate)
     resume_validate.add_argument("--proposal", type=Path, required=True)
     resume_validate.add_argument("--latexmk", type=Path, default=Path("latexmk"))
+    resume_settings = resume_commands.add_parser("settings", help="manage generic resume settings")
+    resume_settings_commands = resume_settings.add_subparsers(
+        dest="resume_settings_command", required=True
+    )
+    resume_settings_show = resume_settings_commands.add_parser("show", help="show resume settings")
+    _config_argument(resume_settings_show)
+    resume_settings_set = resume_settings_commands.add_parser("set", help="update resume settings")
+    _config_argument(resume_settings_set)
+    resume_settings_set.add_argument("--template-path")
+    resume_settings_set.add_argument("--editable-section", action="append")
+    resume_settings_set.add_argument("--bullet-min-chars", type=int)
+    resume_settings_set.add_argument("--bullet-target-chars", type=int)
+    resume_settings_set.add_argument("--bullet-max-chars", type=int)
+    resume_settings_set.add_argument("--max-pages", type=int)
+    resume_settings_set.add_argument("--output-root")
+    resume_settings_set.add_argument("--latexmk")
+    resume_package = resume_commands.add_parser(
+        "create-package", help="create an isolated job output package"
+    )
+    _config_argument(resume_package)
+    resume_package.add_argument("--cycle", required=True)
+    resume_package.add_argument("--application-slug", required=True)
+    resume_package.add_argument("--job-url", required=True)
 
     applications = subcommands.add_parser("applications", help="manage local applications")
     _config_argument(applications)
@@ -151,6 +176,31 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "zoho" and args.zoho_command == "ingest-fixture":
         _print_json({"created": ingest_fixture(store, args.fixture)})
+        return 0
+    if args.command == "resume" and args.resume_command == "settings":
+        if args.resume_settings_command == "show":
+            _print_json(resume_settings_as_json(load_config(args.config).resume))
+            return 0
+        updates = {
+            "template_path": args.template_path,
+            "editable_sections": args.editable_section,
+            "bullet_min_chars": args.bullet_min_chars,
+            "bullet_target_chars": args.bullet_target_chars,
+            "bullet_max_chars": args.bullet_max_chars,
+            "max_pages": args.max_pages,
+            "output_root": args.output_root,
+            "latexmk": args.latexmk,
+        }
+        _print_json(resume_settings_as_json(update_settings(args.config, updates)))
+        return 0
+    if args.command == "resume" and args.resume_command == "create-package":
+        package = create_job_package(
+            output_root=load_config(args.config).resume.output_root,
+            cycle=args.cycle,
+            application_slug=args.application_slug,
+            job_url=args.job_url,
+        )
+        _print_json(asdict(package))
         return 0
     if args.command == "resume" and args.resume_command == "propose":
         proposal = create_resume_proposal(
