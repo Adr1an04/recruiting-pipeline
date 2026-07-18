@@ -49,6 +49,19 @@ def replace_section_contents(source: str, section_name: str, replacement: str) -
     return source[:start].rstrip() + "\n" + replacement.strip() + "\n" + source[end:]
 
 
+def append_section_contents(source: str, section_name: str, addition: str) -> str:
+    """Append to one section body without removing existing résumé content."""
+    matches = [
+        match for match in _SECTION_HEADING.finditer(source) if match.group("name") == section_name
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one section named {section_name!r}")
+    following = _SECTION_HEADING.search(source, matches[0].end())
+    insertion = following.start() if following else len(source)
+    prefix = source[:insertion].rstrip() + "\n"
+    return prefix + addition.strip() + "\n" + source[insertion:]
+
+
 def _safe_path_component(value: str) -> str:
     if not _SAFE_PATH_COMPONENT.fullmatch(value):
         raise ValueError("cycle and application slug must be safe path component values")
@@ -113,7 +126,7 @@ def create_section_resume_proposal(
     if any(marker in latex_content for marker in _DISALLOWED_LATEX):
         raise ValueError("latex_content contains a disallowed file or shell command")
     original = resume_path.read_text(encoding="utf-8")
-    proposed = replace_section_contents(original, section_name, latex_content)
+    proposed = append_section_contents(original, section_name, latex_content)
     output_dir.mkdir(parents=True, exist_ok=True)
     proposed_tex_path = output_dir / "proposal.tex"
     diff_path = output_dir / "proposal.diff"
