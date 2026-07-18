@@ -10,7 +10,7 @@ from recruiting_pipeline.mcp_server import build_server
 
 
 class McpServerTests(unittest.TestCase):
-    def test_exposes_only_read_only_pipeline_tools(self) -> None:
+    def test_exposes_read_and_explicit_local_workspace_tools(self) -> None:
         with TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.toml"
             config_path.write_text(DEFAULT_CONFIG)
@@ -20,7 +20,15 @@ class McpServerTests(unittest.TestCase):
 
             self.assertEqual(
                 {tool.name for tool in tools},
-                {"pipeline_status", "list_applications", "list_evidence", "list_mail_events"},
+                {
+                    "pipeline_status",
+                    "list_applications",
+                    "list_evidence",
+                    "list_mail_events",
+                    "prepare_job_workspace",
+                    "create_tailored_resume",
+                    "validate_tailored_resume",
+                },
             )
 
 

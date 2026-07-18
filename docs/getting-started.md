@@ -81,16 +81,33 @@ The live connector uses Zoho's **Mobile-based application** OAuth type, Authoriz
 
 ## 5. Connect Hermes through MCP
 
-Copy `integrations/hermes/mcp.example.yaml` into the selected Hermes profile's `config.yaml`, replacing the placeholder absolute paths locally. Review the full command before enabling it: a local MCP server runs with Hermes client permissions. Hermes starts this server through stdio and exposes tools prefixed with `mcp_recruiting_pipeline_`.
+### Plug-and-play registration
 
-The initial MCP server exposes only read-only local tools:
+After initializing the local config, add the server with Hermes:
+
+```bash
+hermes mcp add recruiting-pipeline \
+  --command "uv --directory /absolute/path/to/recruiting-pipeline run recruiting-pipeline-mcp"
+```
+
+Set `RECRUITING_PIPELINE_CONFIG` in the MCP server environment to the non-secret local config path. Alternatively, copy `integrations/hermes/mcp.example.yaml` into the selected Hermes profile configuration and replace its local path placeholders. Never put OAuth tokens, client secrets, résumé files, or vault contents in that config.
+
+Hermes exposes tools prefixed with `mcp_recruiting_pipeline_`:
+
+**Read-only context**
 
 - `pipeline_status`
 - `list_applications`
 - `list_evidence`
 - `list_mail_events`
 
-It does not receive a Zoho token and it cannot change external services.
+**Explicit local artifact actions**
+
+- `prepare_job_workspace` — fetches a supplied job URL, selects approved evidence, creates the Finder-visible package, and writes a tracker note.
+- `create_tailored_resume` — writes only a reviewable tailored `.tex`, diff, and claim report inside that package, gated by supplied approved evidence IDs and configured editable sections.
+- `validate_tailored_resume` — explicitly compiles the selected proposal locally; it never publishes or submits it.
+
+The MCP server has no outbound application or message tool. Zoho credentials remain in macOS Keychain and are never sent to Hermes.
 
 ## 6. Add the workflow skill
 
