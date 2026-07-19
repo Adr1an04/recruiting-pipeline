@@ -62,9 +62,12 @@ uv run recruiting-pipeline resume propose \
 # This does not write the original source or synchronize a remote.
 uv run recruiting-pipeline resume validate \
   --config ~/.config/recruiting-pipeline/config.toml \
-  --proposal /absolute/path/to/local-proposals/proposal.tex \
-  --latexmk /absolute/path/to/latexmk
+  --proposal /absolute/path/to/local-proposals/proposal.tex
 ```
+
+The compiler is discovered from `PATH`. On macOS, the standard MacTeX location
+`/Library/TeX/texbin/latexmk` is also detected automatically. Use `--latexmk` only to select a
+different executable explicitly.
 
 The Zoho command accepts local fixtures only. It does not use OAuth, network access, or a mailbox:
 

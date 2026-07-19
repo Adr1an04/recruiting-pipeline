@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import load_config
+from .resume import resolve_latexmk_executable
 from .store import PipelineStore
 
 
@@ -45,7 +46,9 @@ def check_installation(config_path: Path) -> DoctorReport:
         warnings["resume_template"] = "missing"
     else:
         checks["resume_template"] = "ok"
-    if shutil.which(config.resume.latexmk) is None:
+    try:
+        resolve_latexmk_executable(Path(config.resume.latexmk))
+    except FileNotFoundError:
         warnings["latexmk"] = "unavailable"
     else:
         checks["latexmk"] = "ok"

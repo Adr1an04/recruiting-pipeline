@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import difflib
+import errno
 import json
+import os
 import re
+import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,6 +43,33 @@ _TERM_CYCLE = re.compile(
     re.IGNORECASE,
 )
 _SECTION_HEADING = re.compile(r"^\\section\{(?P<name>[^}]+)\}\s*$", re.MULTILINE)
+_MACOS_TEXBIN = Path("/Library/TeX/texbin")
+
+
+def resolve_latexmk_executable(latexmk: Path = Path("latexmk")) -> Path:
+    """Resolve latexmk even when a macOS launch agent omits MacTeX from PATH."""
+    configured = latexmk.expanduser()
+    discovered = shutil.which(str(configured))
+    if discovered is not None:
+        return Path(discovered).absolute()
+
+    if sys.platform == "darwin" and configured.parent == Path("."):
+        mactex_executable = _MACOS_TEXBIN / configured.name
+        if mactex_executable.is_file() and os.access(mactex_executable, os.X_OK):
+            return mactex_executable
+
+    raise FileNotFoundError(
+        errno.ENOENT,
+        (
+            f"LaTeX compiler {str(configured)!r} was not found on PATH"
+            + (
+                f" or in {_MACOS_TEXBIN}"
+                if sys.platform == "darwin" and configured.parent == Path(".")
+                else ""
+            )
+        ),
+        str(configured),
+    )
 
 
 def normalize_cycle(cycle: str) -> str:
@@ -341,12 +372,26 @@ def validate_latex_proposal(
     """Compile a selected local proposal without touching the resume source or remote."""
     if proposal_path.suffix.lower() != ".tex" or not proposal_path.is_file():
         raise ValueError("proposal_path must point to an existing .tex proposal")
-    command = (str(latexmk), "-pdf", "-interaction=nonstopmode", proposal_path.name)
+    latexmk_executable = resolve_latexmk_executable(latexmk)
+    command = (
+        str(latexmk_executable),
+        "-pdf",
+        "-interaction=nonstopmode",
+        proposal_path.name,
+    )
+    environment = os.environ.copy()
+    executable_directory = str(latexmk_executable.parent)
+    path_entries = environment.get("PATH", "").split(os.pathsep)
+    if executable_directory not in path_entries:
+        environment["PATH"] = os.pathsep.join(
+            [executable_directory, *[entry for entry in path_entries if entry]]
+        )
     completed = subprocess.run(
         command,
         cwd=proposal_path.parent,
         capture_output=True,
         check=False,
+        env=environment,
         text=True,
         timeout=120,
     )

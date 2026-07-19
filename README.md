@@ -76,6 +76,9 @@ Optional features have additional requirements:
 - macOS Keychain for the built-in Zoho OAuth flow
 - an authenticated [`gws`](https://github.com/googleworkspace/cli) command for Gmail
 
+On macOS, the standard MacTeX location at `/Library/TeX/texbin` is detected automatically,
+including when the pipeline runs from a launch agent whose `PATH` omits MacTeX.
+
 ### 1. Install
 
 ```bash
