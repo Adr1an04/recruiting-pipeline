@@ -46,14 +46,16 @@ def write_job_tracker_note(
     package_dir: Path,
     resume_pdf: Path | None = None,
 ) -> Path:
-    """Create the detailed note inside Job Applications and update its cycle tracker."""
+    """Create the detailed note below its cycle and update the cycle tracker."""
     if not job_url.startswith(("https://", "http://")):
         raise ValueError("job URL must use HTTP(S)")
     safe_company, safe_role = _safe_name(company), _safe_name(role)
     notes_dir = tracker_dir.expanduser().resolve()
     notes_dir.mkdir(parents=True, exist_ok=True)
     note_name = f"{safe_company} — {safe_role}"
-    note_path = notes_dir / f"{note_name}.md"
+    cycle_notes_dir = notes_dir / f"{cycle} Applications"
+    cycle_notes_dir.mkdir(exist_ok=True)
+    note_path = cycle_notes_dir / f"{note_name}.md"
     relative_package = package_dir.expanduser().resolve().as_posix()
     if not note_path.exists():
         pdf_line = f"- Resume PDF: `{resume_pdf.expanduser().resolve()}`\n" if resume_pdf else ""

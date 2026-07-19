@@ -28,6 +28,12 @@ class ObsidianTrackerTests(unittest.TestCase):
                 job_url="https://jobs.example.test/123",
                 package_dir=root / "applications" / "Fall26" / "ExampleCo",
             )
+            self.assertEqual(
+                note,
+                (
+                    tracker / "Fall 2026 Applications" / "Example Co — Software Engineer Intern.md"
+                ).resolve(),
+            )
             self.assertTrue(note.exists())
             self.assertIn("https://jobs.example.test/123", note.read_text(encoding="utf-8"))
             self.assertIn(
