@@ -100,9 +100,10 @@ def build_server(config_path: Path) -> FastMCP:
             raise ValueError("resume template_path and vault_path must be configured")
         snapshot = fetch_job_snapshot(job_url)
         evidence = select_relevant_evidence(snapshot, store.list_evidence())
+        package_cycle = cycle.casefold().replace(" ", "-")
         workspace = create_job_workspace(
             output_root=config.resume.output_root,
-            cycle=cycle,
+            cycle=package_cycle,
             application_slug=application_slug,
             job_url=job_url,
             job_snapshot=snapshot,

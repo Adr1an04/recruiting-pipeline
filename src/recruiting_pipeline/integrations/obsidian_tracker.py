@@ -10,6 +10,32 @@ def _safe_name(value: str) -> str:
     return cleaned
 
 
+def _upsert_cycle_tracker(
+    *, tracker_dir: Path, cycle: str, company: str, role: str, job_url: str, note_name: str
+) -> None:
+    """Record a job once in its configured cycle tracker, never in a top-level Projects note."""
+    cycle_path = tracker_dir / f"{cycle} Applications.md"
+    if not cycle_path.is_file():
+        raise ValueError(f"cycle tracker does not exist: {cycle_path.name}")
+    text = cycle_path.read_text(encoding="utf-8")
+    header = (
+        "| Company | Role | Location / work mode | Source | Status | Applied | "
+        "Next action | Contact / link |"
+    )
+    divider = "| --- | --- | --- | --- | --- | --- | --- | --- |"
+    if header not in text or divider not in text:
+        raise ValueError(f"cycle tracker has no application table: {cycle_path.name}")
+    marker = f"[[{note_name}]]"
+    if marker in text:
+        return
+    row = (
+        f"| {company} | {role} |  | [Posting]({job_url}) | Researching |  | "
+        f"Review role requirements and decide whether to apply. | {marker} |"
+    )
+    text = text.replace(divider, divider + "\n" + row, 1)
+    cycle_path.write_text(text, encoding="utf-8")
+
+
 def write_job_tracker_note(
     *,
     tracker_dir: Path,
@@ -20,27 +46,35 @@ def write_job_tracker_note(
     package_dir: Path,
     resume_pdf: Path | None = None,
 ) -> Path:
-    """Create a local Obsidian tracker note; it never changes external job systems."""
+    """Create the detailed note inside Job Applications and update its cycle tracker."""
     if not job_url.startswith(("https://", "http://")):
         raise ValueError("job URL must use HTTP(S)")
     safe_company, safe_role = _safe_name(company), _safe_name(role)
     notes_dir = tracker_dir.expanduser().resolve()
     notes_dir.mkdir(parents=True, exist_ok=True)
-    note_path = notes_dir / f"{safe_company} — {safe_role}.md"
-    if note_path.exists():
-        return note_path
+    note_name = f"{safe_company} — {safe_role}"
+    note_path = notes_dir / f"{note_name}.md"
     relative_package = package_dir.expanduser().resolve().as_posix()
-    pdf_line = f"- Resume PDF: `{resume_pdf.expanduser().resolve()}`\n" if resume_pdf else ""
-    note_path.write_text(
-        f"# {safe_company} — {safe_role}\n\n"
-        f"- Cycle: [[{cycle} Applications]]\n"
-        "- Status: Ready to apply\n"
-        f"- Job URL: {job_url}\n"
-        f"- Package: `{relative_package}`\n"
-        f"{pdf_line}"
-        "- Next action: Review tailored résumé and job requirements.\n\n"
-        "## Resume / portfolio emphasis\n\n"
-        "Generated from approved career evidence; see the package claim report.\n",
-        encoding="utf-8",
+    if not note_path.exists():
+        pdf_line = f"- Resume PDF: `{resume_pdf.expanduser().resolve()}`\n" if resume_pdf else ""
+        note_path.write_text(
+            f"# {note_name}\n\n"
+            f"- Cycle: [[{cycle} Applications]]\n"
+            "- Status: Researching\n"
+            f"- Job URL: {job_url}\n"
+            f"- Package: `{relative_package}`\n"
+            f"{pdf_line}"
+            "- Next action: Review tailored résumé and job requirements.\n\n"
+            "## Resume / portfolio emphasis\n\n"
+            "Generated from approved career evidence; see the package claim report.\n",
+            encoding="utf-8",
+        )
+    _upsert_cycle_tracker(
+        tracker_dir=notes_dir,
+        cycle=cycle,
+        company=safe_company,
+        role=safe_role,
+        job_url=job_url,
+        note_name=note_name,
     )
     return note_path
