@@ -163,6 +163,67 @@ def create_section_resume_proposal(
     return ResumeProposal(proposed_tex_path, diff_path, claim_report_path)
 
 
+def create_keyword_prioritized_resume_proposal(
+    *, resume_path: Path, output_dir: Path, job_description: str, evidence: list[Evidence]
+) -> ResumeProposal:
+    """Create a safe skills-only proposal by reordering existing language skills for a job."""
+    if not evidence or any(not item.approved for item in evidence):
+        raise ValueError("a resume proposal requires approved evidence")
+    original = resume_path.read_text(encoding="utf-8")
+    language_line = next(
+        (line for line in original.splitlines() if "\\textbf{Languages:}" in line), None
+    )
+    if language_line is None:
+        raise ValueError("resume has no supported Languages line to prioritize")
+    prefix, values = language_line.split("Languages:}", 1)
+    suffix = "\\\\" if values.rstrip().endswith("\\\\") else ""
+    names = values.removesuffix(suffix).strip().split(", ")
+    terms = job_description.casefold()
+    prioritized = sorted(
+        names, key=lambda name: (name.casefold() in terms, name.casefold()), reverse=True
+    )
+    replacement = (
+        prefix + "Languages:} " + ", ".join(prioritized) + (" " + suffix if suffix else "")
+    )
+    proposed = original.replace(language_line, replacement, 1)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    proposed_tex_path = output_dir / "proposal.tex"
+    diff_path = output_dir / "proposal.diff"
+    claim_report_path = output_dir / "claim-report.json"
+    proposed_tex_path.write_text(proposed, encoding="utf-8")
+    diff_path.write_text(
+        "".join(
+            difflib.unified_diff(
+                original.splitlines(keepends=True),
+                proposed.splitlines(keepends=True),
+                fromfile=str(resume_path),
+                tofile=str(proposed_tex_path),
+            )
+        ),
+        encoding="utf-8",
+    )
+    claim_report_path.write_text(
+        json.dumps(
+            {
+                "approved_evidence": [
+                    {"id": item.id, "source_ref": item.source_ref, "text": item.text}
+                    for item in evidence
+                ],
+                "tailoring": (
+                    "Reordered only existing language skills by exact job-description mentions."
+                ),
+                "source_modified": False,
+                "external_sync": "not performed",
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ResumeProposal(proposed_tex_path, diff_path, claim_report_path)
+
+
 def create_resume_proposal(
     *, resume_path: Path, output_dir: Path, latex_snippet: str, evidence: list[Evidence]
 ) -> ResumeProposal:

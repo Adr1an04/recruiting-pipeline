@@ -14,7 +14,11 @@ from .config import load_config
 from .integrations.obsidian_tracker import write_job_tracker_note
 from .job_intake import fetch_job_snapshot, select_relevant_evidence
 from .job_workspace import create_job_workspace
-from .resume import create_section_resume_proposal, validate_latex_proposal
+from .resume import (
+    create_keyword_prioritized_resume_proposal,
+    create_section_resume_proposal,
+    validate_latex_proposal,
+)
 from .store import PipelineStore
 
 _READ_ONLY = ToolAnnotations(
@@ -110,6 +114,17 @@ def build_server(config_path: Path) -> FastMCP:
             template_path=config.resume.template_path,
             selected_evidence=evidence,
         )
+        proposal = create_keyword_prioritized_resume_proposal(
+            resume_path=workspace.template_copy_path,
+            output_dir=workspace.package.package_dir / "artifacts",
+            job_description=snapshot,
+            evidence=evidence,
+        )
+        validation = validate_latex_proposal(
+            proposal.proposed_tex_path, latexmk=Path(config.resume.latexmk)
+        )
+        if validation.returncode != 0:
+            raise ValueError("automatic tailored resume did not compile")
         if config.tracker.enabled:
             if config.tracker.tracker_dir is None:
                 raise ValueError("tracking configuration is incomplete")
@@ -127,6 +142,8 @@ def build_server(config_path: Path) -> FastMCP:
             "package_dir": str(workspace.package.package_dir),
             "template_path": str(workspace.template_copy_path),
             "tracker_note": str(tracker_note) if tracker_note is not None else None,
+            "proposal_tex": str(proposal.proposed_tex_path),
+            "proposal_pdf": str(proposal.proposed_tex_path.with_suffix(".pdf")),
             "evidence": [cast(dict[str, object], _json_value(asdict(item))) for item in evidence],
         }
 
