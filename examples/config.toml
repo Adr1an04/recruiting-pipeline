@@ -9,6 +9,9 @@ vault_path = ""
 # Supported read-only adapters: "zoho" and "gmail". Gmail uses an already-authenticated gws CLI.
 provider = "zoho"
 gws_command = "gws"
+# Non-secret client identifier for scheduled Zoho sync; credentials stay in the OS keyring.
+client_id = ""
+accounts_url = "https://accounts.zoho.com"
 folder = "Job Applications"
 
 [tracking]

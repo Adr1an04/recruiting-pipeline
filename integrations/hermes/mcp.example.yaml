@@ -7,16 +7,16 @@
 mcp_discovery_timeout: 30
 
 mcp_servers:
-  recruiting_pipeline:
+  erga_mcp:
     command: uv
     args:
       - --directory
-      - /absolute/path/to/recruiting-pipeline
+      - /absolute/path/to/erga-mcp
       - run
-      - recruiting-pipeline-mcp
+      - erga-mcp
     env:
       # Non-secret local configuration path only. Do not pass OAuth tokens.
-      RECRUITING_PIPELINE_CONFIG: /absolute/path/to/recruiting-pipeline-config.toml
+      ERGA_MCP_CONFIG: /absolute/path/to/erga-mcp-config.toml
     # Intake may fetch a job page and run a local LaTeX build.
     # Worst case is a 30 s page fetch plus a 120 s LaTeX validation. Leave
     # enough outer headroom for startup, artifact writes, and result transfer.
@@ -31,6 +31,8 @@ mcp_servers:
         - list_evidence
         - list_mail_events
         - intake_job_url
+        - install_mail_monitor_scripts
+        - export_data
         - create_tailored_resume
         - validate_tailored_resume
       prompts: false

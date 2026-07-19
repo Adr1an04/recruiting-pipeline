@@ -11,14 +11,12 @@ from types import ModuleType
 from typing import Any
 from unittest.mock import patch
 
-_PLUGIN_DIR = (
-    Path(__file__).parents[1] / "integrations" / "hermes" / "plugins" / "recruiting-pipeline-router"
-)
+_PLUGIN_DIR = Path(__file__).parents[1] / "integrations" / "hermes" / "plugins" / "erga-mcp-router"
 
 
 def _load_router() -> ModuleType:
     plugin_path = _PLUGIN_DIR / "__init__.py"
-    spec = importlib.util.spec_from_file_location("recruiting_pipeline_router", plugin_path)
+    spec = importlib.util.spec_from_file_location("erga_mcp_router", plugin_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -34,11 +32,11 @@ class _FakePluginContext:
     ) -> None:
         self.result = result
         self.results = list(results or [])
-        self.calls: list[tuple[str, dict[str, str]]] = []
+        self.calls: list[tuple[str, dict[str, Any]]] = []
         self.hooks: dict[str, Any] = {}
         self.commands: dict[str, Any] = {}
 
-    def dispatch_tool(self, name: str, arguments: dict[str, str]) -> str:
+    def dispatch_tool(self, name: str, arguments: dict[str, Any]) -> str:
         """Match Hermes 0.18.2's stable two-positional-argument dispatch usage."""
         self.calls.append((name, arguments))
         if self.results:
@@ -182,7 +180,7 @@ class HermesJobUrlRouterTests(unittest.TestCase):
 
         self.assertEqual(
             context.calls,
-            [("mcp__recruiting_pipeline__intake_job_url", {"job_url": url})],
+            [("mcp__erga_mcp__intake_job_url", {"job_url": url})],
         )
         assert injected is not None
         assert repeated is not None
@@ -311,12 +309,12 @@ class HermesJobUrlRouterTests(unittest.TestCase):
             )
 
             assert injected is not None
-            self.assertEqual(context.calls[0][0], "mcp__recruiting_pipeline__intake_job_url")
+            self.assertEqual(context.calls[0][0], "mcp__erga_mcp__intake_job_url")
             self.assertEqual([name for name, _ in context.calls[1:3]], ["web_search", "web_search"])
             self.assertIn("site:reddit.com", context.calls[1][1]["query"])
             self.assertEqual(
                 context.calls[3][0],
-                "mcp__recruiting_pipeline__record_secondary_research",
+                "mcp__erga_mcp__record_secondary_research",
             )
             self.assertIn("secondary_research_note", injected["context"])
 
@@ -391,18 +389,18 @@ class HermesJobUrlRouterTests(unittest.TestCase):
 
     def test_retries_only_transient_mcp_startup_errors(self) -> None:
         url = "https://jobs.ashbyhq.com/example/00000000-0000-0000-0000-000000000000"
-        tool_name = "mcp__recruiting_pipeline__intake_job_url"
+        tool_name = "mcp__erga_mcp__intake_job_url"
         context = _FakePluginContext(
             results=[
                 json.dumps({"error": f"Unknown tool: {tool_name}"}),
-                json.dumps({"error": "MCP server 'recruiting-pipeline' is not connected"}),
+                json.dumps({"error": "MCP server 'erga-mcp' is not connected"}),
                 '{"package_dir":"/tmp/ready"}',
             ]
         )
         clock = _FakeClock()
         env = {
-            "RECRUITING_PIPELINE_MCP_READY_TIMEOUT_SECONDS": "2",
-            "RECRUITING_PIPELINE_MCP_READY_RETRY_SECONDS": "0.25",
+            "ERGA_MCP_READY_TIMEOUT_SECONDS": "2",
+            "ERGA_MCP_READY_RETRY_SECONDS": "0.25",
         }
 
         with patch.dict(os.environ, env, clear=False):
@@ -442,11 +440,11 @@ class HermesJobUrlRouterTests(unittest.TestCase):
         self.assertNotIn("must-not-run", injected["context"])
 
     def test_retry_classifier_rejects_other_tool_and_mcp_errors(self) -> None:
-        tool_name = "mcp__recruiting_pipeline__intake_job_url"
+        tool_name = "mcp__erga_mcp__intake_job_url"
         non_readiness_errors = [
             "Unknown tool: browser",
-            "MCP server 'recruiting-pipeline' transport is down; reconnect requested",
-            "MCP server 'recruiting-pipeline' is unreachable",
+            "MCP server 'erga-mcp' transport is down; reconnect requested",
+            "MCP server 'erga-mcp' is unreachable",
             "job URL resolved to a private address",
         ]
 
@@ -458,13 +456,13 @@ class HermesJobUrlRouterTests(unittest.TestCase):
 
     def test_readiness_retry_is_bounded_by_configured_timeout(self) -> None:
         url = "https://jobs.ashbyhq.com/example/00000000-0000-0000-0000-000000000000"
-        tool_name = "mcp__recruiting_pipeline__intake_job_url"
+        tool_name = "mcp__erga_mcp__intake_job_url"
         startup_error = json.dumps({"error": f"Unknown tool: {tool_name}"})
         context = _FakePluginContext(result=startup_error)
         clock = _FakeClock()
         env = {
-            "RECRUITING_PIPELINE_MCP_READY_TIMEOUT_SECONDS": "0.5",
-            "RECRUITING_PIPELINE_MCP_READY_RETRY_SECONDS": "0.2",
+            "ERGA_MCP_READY_TIMEOUT_SECONDS": "0.5",
+            "ERGA_MCP_READY_RETRY_SECONDS": "0.2",
         }
 
         with patch.dict(os.environ, env, clear=False):
@@ -489,8 +487,8 @@ class HermesJobUrlRouterTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "RECRUITING_PIPELINE_MCP_READY_TIMEOUT_SECONDS": "999",
-                "RECRUITING_PIPELINE_MCP_READY_RETRY_SECONDS": "999",
+                "ERGA_MCP_READY_TIMEOUT_SECONDS": "999",
+                "ERGA_MCP_READY_RETRY_SECONDS": "999",
             },
             clear=True,
         ):
@@ -524,6 +522,118 @@ class HermesJobUrlRouterTests(unittest.TestCase):
         self.assertEqual(result, "done")
         self.assertEqual(len(context.calls), 1)
         self.assertEqual(context.calls[0][1], {"job_url": url})
+
+    def test_monitor_command_installs_scripts_and_delivers_cron_to_origin(self) -> None:
+        context = _FakePluginContext(
+            results=[
+                json.dumps(
+                    {
+                        "mail_script": "erga-mcp-mail.py",
+                        "history_script": "erga-mcp-history.py",
+                    }
+                ),
+                json.dumps({"jobs": [{"name": "erga-history-digest"}]}),
+                json.dumps({"success": True, "name": "erga-mail-monitor"}),
+            ]
+        )
+        self.router.register(context)
+
+        result = json.loads(context.commands["setup-erga-monitor"]("14"))
+
+        self.assertEqual(result["delivery"], "origin")
+        self.assertEqual(result["history_days"], 14)
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(
+            context.calls[0],
+            (
+                "mcp__erga_mcp__install_mail_monitor_scripts",
+                {"history_days": 14, "replace": True},
+            ),
+        )
+        self.assertEqual(context.calls[1], ("cronjob", {"action": "list"}))
+        create_call = context.calls[2]
+        self.assertEqual(create_call[0], "cronjob")
+        self.assertEqual(create_call[1]["schedule"], "*/15 * * * *")
+        self.assertTrue(create_call[1]["no_agent"])
+        self.assertNotIn("deliver", create_call[1])
+
+    def test_monitor_command_falls_back_when_platform_hides_cron_toolset(self) -> None:
+        context = _FakePluginContext(
+            result="Unknown tool: cronjob",
+            results=[
+                json.dumps(
+                    {
+                        "mail_script": "erga-mcp-mail.py",
+                        "history_script": "erga-mcp-history.py",
+                    }
+                )
+            ],
+        )
+        direct_results = [
+            json.dumps({"success": True, "jobs": []}),
+            json.dumps({"success": True, "name": "erga-mail-monitor"}),
+            json.dumps({"success": True, "name": "erga-history-digest"}),
+        ]
+        self.router.register(context)
+
+        with patch.object(
+            self.router, "_direct_cron_dispatch", side_effect=direct_results
+        ) as direct:
+            result = json.loads(context.commands["setup-erga-monitor"]("7"))
+
+        self.assertEqual(result["created"], 2)
+        self.assertEqual(result["delivery"], "origin")
+        self.assertEqual(direct.call_count, 3)
+        self.assertEqual(direct.call_args_list[0].args[0], {"action": "list"})
+        self.assertNotIn("deliver", direct.call_args_list[1].args[0])
+
+    def test_monitor_files_are_mirrored_into_the_active_hermes_profile(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "default" / "scripts"
+            target_home = root / "profiles" / "coder"
+            source.mkdir(parents=True)
+            files = {
+                "erga-mcp-monitor.json": '{"history_days": 7}\n',
+                "erga-mcp-mail.py": "print('mail')\n",
+                "erga-mcp-history.py": "print('history')\n",
+            }
+            for name, content in files.items():
+                (source / name).write_text(content, encoding="utf-8")
+            payload = {
+                "settings": str(source / "erga-mcp-monitor.json"),
+                "mail_script": "erga-mcp-mail.py",
+                "history_script": "erga-mcp-history.py",
+            }
+
+            with patch.object(self.router, "_active_hermes_home", return_value=target_home):
+                self.router._copy_monitor_files_to_active_profile(payload)
+
+            for name, content in files.items():
+                self.assertEqual(
+                    (target_home / "scripts" / name).read_text(encoding="utf-8"),
+                    content,
+                )
+
+    def test_export_command_returns_a_native_validated_zip_attachment(self) -> None:
+        with TemporaryDirectory() as directory:
+            export_root = Path(directory) / "exports"
+            export_root.mkdir()
+            archive = export_root / "recruiting.zip"
+            archive.write_bytes(b"PK\x03\x04synthetic")
+            context = _FakePluginContext(
+                result=json.dumps({"archive": str(archive), "export_root": str(export_root)})
+            )
+            self.router.register(context)
+
+            result = context.commands["export-erga"]("")
+
+            self.assertIn("[[as_document]]", result)
+            self.assertIn(f'MEDIA:"{archive.resolve()}"', result)
+            self.assertEqual(
+                context.calls,
+                [("mcp__erga_mcp__export_data", {})],
+            )
 
 
 if __name__ == "__main__":

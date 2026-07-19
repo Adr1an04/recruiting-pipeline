@@ -4,13 +4,13 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.store import PipelineStore
+from erga_mcp.store import ErgaStore
 
 
 class StoreTests(unittest.TestCase):
     def test_records_evidence_and_application_with_audit_trail(self) -> None:
         with TemporaryDirectory() as directory:
-            store = PipelineStore(Path(directory) / "pipeline.sqlite3")
+            store = ErgaStore(Path(directory) / "erga.sqlite3")
             store.initialize()
 
             evidence = store.add_evidence(
@@ -47,6 +47,15 @@ class StoreTests(unittest.TestCase):
                 role="Software Engineering Intern",
             )
             self.assertEqual(len(store.audit_events()), audit_count)
+
+            status = store.update_application_status(application.id, status="interview")
+            self.assertEqual(status.status, "interview")
+            status_audit = store.audit_events()[0]
+            self.assertEqual(status_audit.action, "application.status_updated")
+            self.assertEqual(status_audit.payload, {"from": "draft", "to": "interview"})
+
+            with self.assertRaisesRegex(ValueError, "status must be one of"):
+                store.update_application_status(application.id, status="submitted magically")
 
 
 if __name__ == "__main__":

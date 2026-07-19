@@ -5,7 +5,7 @@
 - The repository contains source code, examples, and synthetic tests only.
 - Local configuration, SQLite state, imports, exports, generated proposals, and user-provided source files are ignored by Git.
 - OAuth refresh tokens and Git tokens belong in the operating-system credential store, never in configuration files, shell history, logs, or repository files.
-- The fixture-only Zoho workflow has no OAuth or network behavior. A future live adapter must request `ZohoMail.messages.READ` and may request `ZohoMail.accounts.READ` only when account discovery is necessary. It must reject broader or mutating scopes.
+- The fixture-only Zoho workflow has no OAuth or network behavior. The live adapter requests only `ZohoMail.messages.READ`, `ZohoMail.folders.READ`, and `ZohoMail.accounts.READ`, and rejects broader or mutating scopes.
 - Mail previews are used only for local classification. The store retains normalized message metadata and classification, not preview/body content.
 
 ## Local MCP trust boundary
@@ -26,6 +26,8 @@ The server declares tool annotations so MCP clients can distinguish its capabili
 | `prepare_job_workspace` | network-read + local-write | Fetches a job URL and creates configured local package/tracker artifacts. |
 | `create_tailored_resume` | local-write | Writes a reviewable proposal, diff, and claim report inside a configured package. |
 | `validate_tailored_resume` | local-exec | Runs the configured local LaTeX validator on an explicit proposal. |
+| `install_mail_monitor_scripts` | local-write | Writes deterministic, credential-free runner scripts for an explicitly configured Hermes profile. |
+| `export_data` | local-read + local-write | Creates an explicit private ZIP containing local records and generated job packages. |
 
 No MCP tool creates remote applications, approves evidence, connects to mail, sends a message, mutates remote mail, or submits a job. Local-write and local-exec tools require explicit user approval in the invoking client. Enabling the optional Hermes job-link router establishes a narrower standing rule: a recognized job link in the current user message is explicit authorization for `intake_job_url` to create local review artifacts. The router respects explicit opt-outs such as “summarize only” and “don't run the pipeline”; a request such as “don't just summarize—run the pipeline” is affirmative authorization. The rule grants no authority for submissions, messages, remote résumé changes, or other tools.
 

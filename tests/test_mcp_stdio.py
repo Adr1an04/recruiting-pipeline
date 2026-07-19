@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from recruiting_pipeline.config import DEFAULT_CONFIG
+from erga_mcp.config import DEFAULT_CONFIG
 
 
 class McpStdioTests(unittest.TestCase):
@@ -18,11 +18,11 @@ class McpStdioTests(unittest.TestCase):
         async def discover(config_path: Path) -> None:
             environment = {
                 **os.environ,
-                "RECRUITING_PIPELINE_CONFIG": str(config_path),
+                "ERGA_MCP_CONFIG": str(config_path),
             }
             parameters = StdioServerParameters(
                 command=sys.executable,
-                args=["-m", "recruiting_pipeline.mcp_server"],
+                args=["-m", "erga_mcp.mcp_server"],
                 env=environment,
             )
             async with stdio_client(parameters) as (read_stream, write_stream):

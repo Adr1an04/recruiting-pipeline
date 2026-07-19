@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from recruiting_pipeline.resume import resolve_latexmk_executable, validate_latex_proposal
+from erga_mcp.resume import resolve_latexmk_executable, validate_latex_proposal
 
 
 class ResumeValidationTests(unittest.TestCase):
@@ -34,9 +34,9 @@ class ResumeValidationTests(unittest.TestCase):
             latexmk.chmod(0o755)
 
             with (
-                patch("recruiting_pipeline.resume.sys.platform", "darwin"),
-                patch("recruiting_pipeline.resume.shutil.which", return_value=None),
-                patch("recruiting_pipeline.resume._MACOS_TEXBIN", texbin),
+                patch("erga_mcp.resume.sys.platform", "darwin"),
+                patch("erga_mcp.resume.shutil.which", return_value=None),
+                patch("erga_mcp.resume._MACOS_TEXBIN", texbin),
             ):
                 resolved = resolve_latexmk_executable(Path("latexmk"))
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from recruiting_pipeline.integrations.gmail_live import (
+from erga_mcp.integrations.gmail_live import (
     fetch_inbox_metadata_with_gws,
     parse_message_metadata,
 )

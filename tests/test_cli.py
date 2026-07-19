@@ -7,8 +7,8 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.cli import main
-from recruiting_pipeline.config import load_config
+from erga_mcp.cli import main
+from erga_mcp.config import load_config
 
 
 class CliTests(unittest.TestCase):
@@ -21,7 +21,7 @@ class CliTests(unittest.TestCase):
             config = load_config(config_path)
             self.assertEqual(exit_code, 0)
             self.assertTrue(config_path.exists())
-            self.assertTrue((config.data_dir / "pipeline.sqlite3").exists())
+            self.assertTrue((config.data_dir / "erga.sqlite3").exists())
             self.assertNotIn("token", config_path.read_text().lower())
 
     def test_status_includes_mail_event_count(self) -> None:

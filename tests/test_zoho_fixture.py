@@ -4,15 +4,15 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.integrations.zoho import ingest_fixture
-from recruiting_pipeline.store import PipelineStore
+from erga_mcp.integrations.zoho import ingest_fixture
+from erga_mcp.store import ErgaStore
 
 
 class ZohoFixtureTests(unittest.TestCase):
     def test_ingests_minimal_metadata_once_and_routes_denials_to_review(self) -> None:
         fixture = Path(__file__).parent / "fixtures" / "zoho_messages.json"
         with TemporaryDirectory() as directory:
-            store = PipelineStore(Path(directory) / "pipeline.sqlite3")
+            store = ErgaStore(Path(directory) / "erga.sqlite3")
 
             first_import = ingest_fixture(store, fixture)
             second_import = ingest_fixture(store, fixture)

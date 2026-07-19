@@ -11,13 +11,13 @@ from threading import Barrier
 from typing import Any, cast
 from unittest.mock import patch
 
-from recruiting_pipeline.config import DEFAULT_CONFIG
-from recruiting_pipeline.mcp_server import (
+from erga_mcp.config import DEFAULT_CONFIG
+from erga_mcp.mcp_server import (
     _compile_intake_proposal,
     _metadata_from_url,
     build_server,
 )
-from recruiting_pipeline.resume import LatexValidation
+from erga_mcp.resume import LatexValidation
 
 
 class McpServerTests(unittest.TestCase):
@@ -81,6 +81,8 @@ class McpServerTests(unittest.TestCase):
                     "list_evidence",
                     "list_mail_events",
                     "intake_job_url",
+                    "install_mail_monitor_scripts",
+                    "export_data",
                     "record_secondary_research",
                     "prepare_job_workspace",
                     "create_tailored_resume",
@@ -144,6 +146,49 @@ class McpServerTests(unittest.TestCase):
             "Do not use this tool for a pasted or bare job URL", advanced.description or ""
         )
 
+    def test_monitor_setup_tool_prepares_scripts_without_creating_delivery_jobs(self) -> None:
+        with TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.toml"
+            config_path.write_text(DEFAULT_CONFIG)
+            hermes_home = Path(directory) / "hermes-profile"
+            server = build_server(config_path)
+            prepared = {
+                "mail_script": "erga-mcp-mail.py",
+                "history_script": "erga-mcp-history.py",
+                "suggested_jobs": [],
+            }
+
+            with (
+                patch(
+                    "erga_mcp.mcp_server.install_hermes_monitor_scripts",
+                    return_value=prepared,
+                ) as install,
+                patch.dict("os.environ", {"HERMES_HOME": str(hermes_home)}),
+            ):
+                result: Any = asyncio.run(
+                    server.call_tool("install_mail_monitor_scripts", {"history_days": 14})
+                )
+
+            self.assertEqual(result[1], prepared)
+            install.assert_called_once_with(
+                config_path=config_path,
+                scripts_dir=hermes_home / "scripts",
+                history_days=14,
+                replace=True,
+            )
+
+    def test_export_tool_creates_a_private_attachable_zip(self) -> None:
+        with TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.toml"
+            config_path.write_text(DEFAULT_CONFIG)
+            result: Any = asyncio.run(build_server(config_path).call_tool("export_data", {}))
+
+            exported = cast(dict[str, object], result[1])
+            archive = Path(str(exported["archive"]))
+            self.assertTrue(archive.is_file())
+            self.assertEqual(archive.suffix, ".zip")
+            self.assertEqual(archive.parent, Path(str(exported["export_root"])))
+
     def test_intakes_one_url_end_to_end_and_safely_reuses_an_exact_repeat(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -173,11 +218,11 @@ class McpServerTests(unittest.TestCase):
 
             with (
                 patch(
-                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    "erga_mcp.mcp_server.fetch_job_snapshot",
                     return_value="Python software engineering internship",
                 ) as fetch,
                 patch(
-                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    "erga_mcp.mcp_server.validate_latex_proposal",
                     side_effect=compile_success,
                 ) as validate,
             ):
@@ -242,11 +287,11 @@ class McpServerTests(unittest.TestCase):
 
             with (
                 patch(
-                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    "erga_mcp.mcp_server.fetch_job_snapshot",
                     return_value="Python FastAPI low-latency software internship",
                 ),
                 patch(
-                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    "erga_mcp.mcp_server.validate_latex_proposal",
                     side_effect=compile_success,
                 ),
             ):
@@ -307,11 +352,11 @@ class McpServerTests(unittest.TestCase):
 
             with (
                 patch(
-                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    "erga_mcp.mcp_server.fetch_job_snapshot",
                     return_value="Python software engineering internship",
                 ),
                 patch(
-                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    "erga_mcp.mcp_server.validate_latex_proposal",
                     side_effect=compile_success,
                 ),
             ):
@@ -347,7 +392,7 @@ class McpServerTests(unittest.TestCase):
                 return validation
 
             with patch(
-                "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                "erga_mcp.mcp_server.validate_latex_proposal",
                 side_effect=compile_two_pages,
             ):
                 result = _compile_intake_proposal(
@@ -412,11 +457,11 @@ class McpServerTests(unittest.TestCase):
 
             with (
                 patch(
-                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    "erga_mcp.mcp_server.fetch_job_snapshot",
                     return_value=snapshot,
                 ) as fetch,
                 patch(
-                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    "erga_mcp.mcp_server.validate_latex_proposal",
                     side_effect=compile_success,
                 ),
             ):
@@ -474,11 +519,11 @@ class McpServerTests(unittest.TestCase):
 
             with (
                 patch(
-                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    "erga_mcp.mcp_server.fetch_job_snapshot",
                     return_value="Software engineering internship",
                 ) as fetch,
                 patch(
-                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    "erga_mcp.mcp_server.validate_latex_proposal",
                     return_value=validation,
                 ),
             ):
@@ -515,11 +560,11 @@ class McpServerTests(unittest.TestCase):
 
             with (
                 patch(
-                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    "erga_mcp.mcp_server.fetch_job_snapshot",
                     return_value="Software engineering internship",
                 ),
                 patch(
-                    "recruiting_pipeline.mcp_server.create_automatic_resume_proposal",
+                    "erga_mcp.mcp_server.create_automatic_resume_proposal",
                     side_effect=RuntimeError("synthetic proposal failure"),
                 ),
                 self.assertRaisesRegex(Exception, "synthetic proposal failure"),
@@ -530,11 +575,11 @@ class McpServerTests(unittest.TestCase):
             validation = LatexValidation(command=("latexmk",), returncode=1, stdout="", stderr="")
             with (
                 patch(
-                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    "erga_mcp.mcp_server.fetch_job_snapshot",
                     return_value="Software engineering internship",
                 ),
                 patch(
-                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    "erga_mcp.mcp_server.validate_latex_proposal",
                     return_value=validation,
                 ),
             ):
@@ -578,11 +623,11 @@ class McpServerTests(unittest.TestCase):
 
             with (
                 patch(
-                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    "erga_mcp.mcp_server.fetch_job_snapshot",
                     return_value="Software engineering internship",
                 ),
                 patch(
-                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    "erga_mcp.mcp_server.validate_latex_proposal",
                     side_effect=subprocess.TimeoutExpired(("latexmk",), 120),
                 ) as validate,
             ):
@@ -629,11 +674,11 @@ class McpServerTests(unittest.TestCase):
 
             with (
                 patch(
-                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    "erga_mcp.mcp_server.fetch_job_snapshot",
                     return_value="Software engineering internship",
                 ),
                 patch(
-                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    "erga_mcp.mcp_server.validate_latex_proposal",
                     side_effect=validate_together,
                 ),
                 ThreadPoolExecutor(max_workers=2) as pool,

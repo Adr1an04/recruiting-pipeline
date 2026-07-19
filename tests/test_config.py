@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.config import load_config
+from erga_mcp.config import load_config
 
 
 class ConfigTests(unittest.TestCase):
@@ -27,6 +27,25 @@ folder = "Job Applications"
             self.assertEqual(config.data_dir, config_path.parent / "state")
             self.assertEqual(config.vault_path, config_path.parent / "vault")
             self.assertEqual(config.mail_folder, "Job Applications")
+            self.assertEqual(config.mail_client_id, "")
+            self.assertEqual(config.mail_accounts_url, "https://accounts.zoho.com")
+
+    def test_loads_non_secret_scheduled_zoho_settings(self) -> None:
+        with TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.toml"
+            config_path.write_text(
+                """
+[mail]
+provider = "zoho"
+client_id = "synthetic-client-id"
+accounts_url = "https://accounts.zoho.eu"
+""".strip()
+            )
+
+            config = load_config(config_path)
+
+            self.assertEqual(config.mail_client_id, "synthetic-client-id")
+            self.assertEqual(config.mail_accounts_url, "https://accounts.zoho.eu")
 
     def test_loads_a_template_agnostic_resume_profile(self) -> None:
         with TemporaryDirectory() as directory:

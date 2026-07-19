@@ -7,7 +7,7 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.cli import main
+from erga_mcp.cli import main
 
 
 class CliWorkflowTests(unittest.TestCase):
@@ -57,6 +57,30 @@ class CliWorkflowTests(unittest.TestCase):
             self.assertEqual(application_code, 0)
             self.assertEqual(application["status"], "draft")
             self.assertEqual(application["evidence_ids"], [evidence["id"]])
+
+            status_code, updated = self._run(
+                [
+                    "applications",
+                    "update-status",
+                    "--config",
+                    str(config_path),
+                    "--application-id",
+                    str(application["id"]),
+                    "--status",
+                    "applied",
+                ]
+            )
+
+            self.assertEqual(status_code, 0)
+            self.assertEqual(updated["status"], "applied")
+
+            archive = Path(directory) / "exports" / "pipeline.zip"
+            export_code, exported = self._run(
+                ["export", "--config", str(config_path), "--output", str(archive)]
+            )
+            self.assertEqual(export_code, 0)
+            self.assertEqual(exported["applications"], 1)
+            self.assertTrue(archive.is_file())
 
 
 if __name__ == "__main__":

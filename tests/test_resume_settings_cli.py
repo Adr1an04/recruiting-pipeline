@@ -7,8 +7,8 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.cli import main
-from recruiting_pipeline.resume_settings import update_settings
+from erga_mcp.cli import main
+from erga_mcp.resume_settings import update_settings
 
 
 class ResumeSettingsCliTests(unittest.TestCase):

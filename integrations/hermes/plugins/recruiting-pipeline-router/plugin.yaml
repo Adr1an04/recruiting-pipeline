@@ -1,9 +1,0 @@
-manifest_version: 1
-name: recruiting-pipeline-router
-version: "0.5.0"
-description: Route job links to researched, tailored, validated-PDF intake with native attachments.
-author: Recruiting Pipeline contributors
-hermes_requires: ">=0.18.2"
-provides_hooks:
-  - pre_llm_call
-  - transform_llm_output

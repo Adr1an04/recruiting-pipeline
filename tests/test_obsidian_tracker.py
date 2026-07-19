@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.integrations.obsidian_tracker import write_job_tracker_note
+from erga_mcp.integrations.obsidian_tracker import write_job_tracker_note
 
 
 class ObsidianTrackerTests(unittest.TestCase):

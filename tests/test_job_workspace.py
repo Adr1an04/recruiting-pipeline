@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.job_workspace import create_job_workspace
-from recruiting_pipeline.models import Evidence
+from erga_mcp.job_workspace import create_job_workspace
+from erga_mcp.models import Evidence
 
 
 class JobWorkspaceTests(unittest.TestCase):

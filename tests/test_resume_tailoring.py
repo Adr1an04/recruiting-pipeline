@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.models import Evidence
-from recruiting_pipeline.resume_tailoring import (
+from erga_mcp.models import Evidence
+from erga_mcp.resume_tailoring import (
     _relevance,
     create_automatic_resume_proposal,
     pdf_page_count,

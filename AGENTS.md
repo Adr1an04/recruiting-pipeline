@@ -1,4 +1,4 @@
-# Recruiting Pipeline — Contributor Notes
+# Erga MCP — Contributor Notes
 
 ## Product boundary
 

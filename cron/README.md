@@ -1,46 +1,74 @@
-# Hermes Cron Examples
+# Hermes Recruiting Monitor
 
-Cron is optional and must remain bounded to local, reversible work. Do not install a job until the local configuration path and private delivery destination have been reviewed.
+The monitor uses two deterministic `--no-agent` jobs. They never submit applications, reply to
+mail, or invoke an LLM:
 
-## Phase 1: deterministic local status digest
+- `erga-mail-monitor` runs every 15 minutes. It reads bounded Inbox metadata, records each
+  provider message ID once, and delivers only newly detected assessments, interviews, offers,
+  acknowledgements, decisions, and recruiter leads. Empty output is silent.
+- `erga-history-digest` runs daily at 9:00. It reports application-status counts and recent
+  recruiting-event history so the user gets a regular pipeline overview.
 
-`cron/scripts/local_status_digest.sh` runs only:
+## Recommended setup from a connected conversation
+
+First configure the selected provider. For Zoho, the client ID is non-secret and belongs in the
+local config; the client secret and tokens remain in the operating-system credential store:
+
+```bash
+uv run erga mail configure \
+  --config /absolute/path/to/config.toml \
+  --provider zoho \
+  --client-id '<client-id>'
+```
+
+After enabling the MCP server and Hermes router plugin, run this slash command in the private
+Discord, Telegram, Signal, or other connected conversation that should receive alerts:
 
 ```text
-recruiting-pipeline status --config <configured local path>
+/setup-erga-monitor
 ```
 
-It performs no network access, mail access, applications, résumé changes, or agent reasoning. Verify it manually first:
+The command installs the runners under `$HERMES_HOME/scripts/` (or `~/.hermes/scripts/` when
+`HERMES_HOME` is unset), creates both cron jobs without an LLM, and omits an explicit delivery
+override so Hermes captures the current chat and thread as the delivery origin. Repeating the
+command refreshes the scripts and does not duplicate jobs with the same names. An optional integer
+changes the history window:
 
-```bash
-./cron/scripts/local_status_digest.sh /absolute/path/to/recruiting-pipeline-config.toml
+```text
+/setup-erga-monitor 14
 ```
 
-For Hermes, copy the script to the selected profile's scripts directory, then create a no-agent job. Replace placeholders locally; do not commit a filled-in command or personal path.
+## CLI preparation and explicit targets
+
+The same scripts can be prepared without the plugin:
 
 ```bash
-mkdir -p ~/.hermes/profiles/<profile>/scripts
-cp cron/scripts/local_status_digest.sh ~/.hermes/profiles/<profile>/scripts/
+uv run erga monitor install-hermes-scripts \
+  --config /absolute/path/to/config.toml
+```
 
-hermes --profile <profile> cron create '0 9 * * 1-5' \
-  --name recruiting-pipeline-status \
-  --script ~/.hermes/profiles/<profile>/scripts/local_status_digest.sh \
+Then create jobs with an explicit private destination. `origin` only resolves to a messaging chat
+when creation occurs inside that chat; a local shell should use a concrete target such as
+`discord:<chat-id>` or `telegram:<chat-id>:<thread-id>`.
+
+```bash
+hermes cron create '*/15 * * * *' \
+  --name erga-mail-monitor \
+  --script erga-mcp-mail.py \
   --no-agent \
-  --workdir /absolute/path/to/recruiting-pipeline \
-  --deliver local \
-  /absolute/path/to/recruiting-pipeline-config.toml
+  --deliver 'discord:<chat-id>'
+
+hermes cron create '0 9 * * *' \
+  --name erga-history-digest \
+  --script erga-mcp-history.py \
+  --no-agent \
+  --deliver 'discord:<chat-id>'
 ```
 
-`--no-agent` is deliberate: the script's JSON stdout is delivered verbatim, without an LLM interpreting local records. Change `--deliver local` to a private, reviewed destination only after confirming the output contains no sensitive data.
+Hermes requires cron scripts to live under its active `$HERMES_HOME/scripts/` and does not pass
+prompt text as script arguments in `--no-agent` mode. The generated runners therefore use a
+private, non-secret sidecar containing only the local config path, history window, package path,
+and pipeline Python executable.
 
-## Read-only Zoho collection stage
-
-The CLI includes a read-only Zoho adapter. A deterministic no-agent poll may run
-`recruiting-pipeline zoho sync` against a configured Inbox using the minimum OAuth scopes,
-normalize newly observed metadata locally, and exit. Configure the client identifier and
-operating-system credential store locally; never commit credentials, personal paths, or a
-filled-in cron command.
-
-Treat cron output as a prompt for review. Zoho credentials stay in the operating system credential
-store selected by Python `keyring`. Never schedule automatic applications, external résumé syncs,
-emails, or social-media actions.
+Review the delivery target before enabling a job: subjects and sender addresses are private
+metadata. Message previews are used transiently for classification but are not retained or sent.

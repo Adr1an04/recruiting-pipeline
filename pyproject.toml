@@ -3,13 +3,14 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "recruiting-pipeline"
+name = "erga-mcp"
 version = "0.1.0"
 description = "A local-first recruiting workflow toolkit for Hermes and other MCP clients."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
-authors = [{ name = "Recruiting Pipeline contributors" }]
+authors = [{ name = "Erga MCP contributors" }]
+keywords = ["career", "local-first", "mcp", "recruiting", "resume"]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "License :: OSI Approved :: MIT License",
@@ -20,16 +21,22 @@ classifiers = [
 ]
 dependencies = ["keyring>=25,<26", "pypdf>=5,<7"]
 
+[project.urls]
+Homepage = "https://github.com/Adr1an04/erga-mcp"
+Documentation = "https://github.com/Adr1an04/erga-mcp/tree/main/docs"
+Issues = "https://github.com/Adr1an04/erga-mcp/issues"
+Repository = "https://github.com/Adr1an04/erga-mcp.git"
+
 [project.optional-dependencies]
 mcp = ["mcp>=1.28,<2"]
 dev = ["mypy>=1.14", "ruff>=0.9"]
 
 [project.scripts]
-recruiting-pipeline = "recruiting_pipeline.cli:main"
-recruiting-pipeline-mcp = "recruiting_pipeline.mcp_server:main"
+erga = "erga_mcp.cli:main"
+erga-mcp = "erga_mcp.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/recruiting_pipeline"]
+packages = ["src/erga_mcp"]
 
 [tool.ruff]
 line-length = 100
@@ -39,4 +46,4 @@ target-version = "py311"
 select = ["E", "F", "I", "UP"]
 
 [tool.coverage.run]
-source = ["recruiting_pipeline"]
+source = ["erga_mcp"]

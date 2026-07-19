@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.resume import create_job_package
+from erga_mcp.resume import create_job_package
 
 
 class ResumePackageTests(unittest.TestCase):

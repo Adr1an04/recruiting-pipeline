@@ -8,16 +8,16 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from recruiting_pipeline.cli import main
+from erga_mcp.cli import main
 
 
 class ZohoCliTests(unittest.TestCase):
     def test_connect_does_not_require_pipeline_config(self) -> None:
         output = StringIO()
         with (
-            patch("recruiting_pipeline.cli.read_client_secret", return_value="secret"),
+            patch("erga_mcp.cli.read_client_secret", return_value="secret"),
             patch(
-                "recruiting_pipeline.cli.connect",
+                "erga_mcp.cli.connect",
                 return_value={"refresh_token": "token"},
             ),
             redirect_stdout(output),

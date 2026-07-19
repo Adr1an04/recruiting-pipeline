@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from recruiting_pipeline.classification import classify_application_message
+from erga_mcp.classification import classify_application_message
 
 
 class ClassificationTests(unittest.TestCase):
@@ -34,6 +34,24 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual(result.kind, "assessment")
         self.assertTrue(result.requires_review)
         self.assertGreaterEqual(result.confidence, 0.95)
+
+    def test_interview_invitation_requires_immediate_review(self) -> None:
+        result = classify_application_message(
+            subject="Schedule your technical interview",
+            preview="Choose an interview time with the engineering team.",
+        )
+
+        self.assertEqual(result.kind, "interview")
+        self.assertTrue(result.requires_review)
+
+    def test_offer_takes_precedence_over_prior_interview_language(self) -> None:
+        result = classify_application_message(
+            subject="Offer letter",
+            preview="Following your technical interview, we are pleased to offer you the role.",
+        )
+
+        self.assertEqual(result.kind, "offer")
+        self.assertTrue(result.requires_review)
 
 
 if __name__ == "__main__":

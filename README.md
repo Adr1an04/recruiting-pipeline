@@ -1,300 +1,175 @@
 <div align="center">
+  <img src="docs/assets/erga-logo.svg" width="720" alt="Erga" />
 
-# Recruiting Pipeline
+  <p><strong>Your private, evidence-first career workspace.</strong></p>
 
-**A private, local workspace for keeping job-search context organized and preparing truthful, reviewable résumé changes.**
+  <p>
+    Local-first&nbsp;&nbsp;·&nbsp;&nbsp;Reviewable&nbsp;&nbsp;·&nbsp;&nbsp;MCP-ready
+  </p>
 
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
-[![Status: Pre-Alpha](https://img.shields.io/badge/Status-Pre--Alpha-f59e0b.svg)](#project-status)
+  <p>
+    <a href="https://github.com/Adr1an04/erga-mcp/actions/workflows/ci.yml"><img src="https://github.com/Adr1an04/erga-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-C8792A.svg" alt="MIT License" /></a>
+    <img src="https://img.shields.io/badge/Status-Pre--Alpha-F2A93B.svg" alt="Pre-Alpha" />
+  </p>
 
-[Quick start](#quick-start) · [What it does](#what-it-does) · [How it works](#how-it-works) · [Integrations](#optional-integrations) · [Security](#privacy-and-safety)
-
+  <p>
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#how-erga-works">How it works</a> ·
+    <a href="docs/getting-started.md">Documentation</a> ·
+    <a href="CONTRIBUTING.md">Contributing</a>
+  </p>
 </div>
 
-## What is this?
+---
 
-Recruiting Pipeline is a **local-first Python CLI** for the repetitive, information-heavy parts of a job search. It keeps a small SQLite database on your computer and helps you:
+**Erga** comes from the Greek word for works or deeds. The project handles the repetitive work
+around a job search while keeping consequential decisions in your hands.
 
-- save verified facts from your work history as reusable **career evidence**;
-- create local draft application records;
-- recognize application acknowledgements, assessments, rejections, and recruiting messages from read-only email metadata;
-- prepare a folder for each job with the job description, relevant evidence, and a copy of your LaTeX résumé;
-- generate a proposed résumé edit, unified diff, and evidence report for you to review; and
-- expose the same local workflow to an MCP client such as [Hermes](https://github.com/NousResearch/hermes-agent).
-
-The project is intentionally conservative: it prepares and organizes work, but **you remain the person who reviews the résumé and submits the application**.
+Erga MCP is an open-source Python CLI and local MCP server that turns verified career evidence,
+job postings, recruiting mail, and a user-provided LaTeX résumé into an organized, reviewable
+workflow. Its core is deterministic and local: SQLite state, auditable records, bounded imports,
+and résumé diffs you approve yourself.
 
 > [!IMPORTANT]
-> This is currently a pre-alpha developer tool. It has a command-line interface, not a web UI, and some workflows require manual commands or an MCP client.
+> Erga prepares research and local drafts. It does not submit applications, send messages, invent
+> résumé claims, mutate email, or update a remote résumé on its own.
 
-## What it does — and what it does not do
+## Principles
 
-| It does | It does not |
+1. **Evidence before generation** — every new résumé claim must trace to career evidence supplied
+   and approved by the user.
+2. **Local by default** — application state, evidence, and generated artifacts remain in paths you
+   control.
+3. **Review before action** — résumé changes are separate proposals with a diff and claim report.
+4. **Narrow integrations** — mail access is read-only, MCP runs over stdio, and optional adapters
+   receive only the capabilities they need.
+5. **Deterministic core** — the standalone CLI and domain layer work without an agent, hosted
+   service, or proprietary UI.
+
+## What Erga does
+
+| Capability | Result |
 | --- | --- |
-| Store recruiting records in a local SQLite database | Submit job applications |
-| Keep an audit trail of local records | Fill out application forms |
-| Import evidence candidates from an Obsidian note | Invent experience, metrics, or résumé claims |
-| Read bounded Gmail or Zoho inbox metadata | Send, delete, label, or modify email |
-| Classify common recruiting messages with simple rules | Automatically change an application's status |
-| Create reviewable LaTeX résumé proposals | Modify your original résumé or push to Overleaf |
-| Create local packages, cited job research, and configured Obsidian tracker notes | Act as a job-submission bot or job-search UI |
+| Career evidence | Stores verified facts with provenance and approval state |
+| Job intake | Captures a public posting and creates an isolated local workspace |
+| Résumé tailoring | Reorders existing, user-written content and creates a reviewable diff |
+| Claim validation | Links proposed claims to approved evidence instead of inventing metrics |
+| Recruiting mail | Classifies bounded Gmail or Zoho metadata using local rules |
+| Application tracking | Keeps draft applications, status history, and an audit trail in SQLite |
+| MCP integration | Exposes the same workflow to Hermes and other compatible clients |
+| Private export | Packages local records and generated job artifacts into an explicit ZIP export |
 
-## The core idea: evidence before résumé bullets
+Erga intentionally does **not** fill forms, submit applications, send recruiter messages, modify
+mailboxes, or silently overwrite your résumé.
 
-Most résumé tools start with generated text. Recruiting Pipeline starts with facts that you have supplied and approved.
+## How Erga works
 
 ```text
-Your verified career facts
-          │
-          ▼
-  Local evidence ledger ──────► Draft application record
-          │
-          ├────► Job-description matching
-          │
-          ▼
-Reviewable LaTeX proposal + diff + claim report
-          │
-          ▼
-      You review it
+verified career facts ───────┐
+                             ▼
+job posting ─────────► evidence ledger ─────► draft application
+                             │
+read-only mail metadata ─────┤
+                             ▼
+                  local job workspace
+                             │
+                             ▼
+              résumé proposal + diff + claim report
+                             │
+                             ▼
+                        you review
 ```
 
-New résumé claims must match approved evidence. Automatic job intake takes the narrower path of
-reordering claims and skills already present in the user-provided template; it does not rewrite
-their text. The tool writes the proposal to a separate output folder, leaves the source résumé
-unchanged, and records template or approved-evidence provenance for every claim in
-`claim-report.json`.
+Automatic tailoring is deliberately narrow. Erga ranks and reorders existing Experience bullets,
+project entries, and skills against visible job-posting content. It does not rewrite those claims.
+Generated packages record the source and output position of each claim, matched terms, and exact
+evidence references when available.
 
 ## Quick start
 
 ### Requirements
 
 - Python 3.11 or newer
-- [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+- [`uv`](https://docs.astral.sh/uv/)
 - Git
 
-Optional features have additional requirements:
+Optional workflows use `latexmk`, an existing LaTeX résumé, a supported operating-system
+credential store, or an authenticated [`gws`](https://github.com/googleworkspace/cli) command.
 
-- `latexmk` to compile a proposed LaTeX résumé
-- an existing LaTeX résumé (`.tex`) for résumé workflows
-- a supported operating-system credential store for the built-in Zoho OAuth flow
-- an authenticated [`gws`](https://github.com/googleworkspace/cli) command for Gmail
-
-On macOS, the standard MacTeX location at `/Library/TeX/texbin` is detected automatically,
-including when the pipeline runs from a launch agent whose `PATH` omits MacTeX.
-
-### 1. Install
+### Install
 
 ```bash
-git clone https://github.com/Adr1an04/recruiting-pipeline.git
-cd recruiting-pipeline
-uv sync --extra mcp --extra dev
+git clone https://github.com/Adr1an04/erga-mcp.git
+cd erga-mcp
+uv sync --extra mcp
 ```
 
-`--extra mcp` installs the optional MCP server. `--extra dev` installs the test and lint tools. For the CLI alone, `uv sync` is enough.
-
-### 2. Create local configuration
+Initialize a private local workspace and verify the installation:
 
 ```bash
-uv run recruiting-pipeline init
-uv run recruiting-pipeline doctor
+uv run erga init
+uv run erga doctor
 ```
 
-By default this creates:
+By default Erga creates:
 
 ```text
-~/.config/recruiting-pipeline/
+~/.config/erga-mcp/
 ├── config.toml
 └── state/
-    └── pipeline.sqlite3
+    └── erga.sqlite3
 ```
 
-The config contains paths and feature settings—not credentials. Relative paths are resolved from the directory containing `config.toml`.
+The configuration contains paths and feature settings, never credentials. Use
+`--config /absolute/path/to/config.toml` to select another location.
 
-To keep the config somewhere else, add `--config /absolute/path/to/config.toml` to commands.
-
-### 3. Add a verified career fact
+### Add evidence and a draft application
 
 ```bash
-uv run recruiting-pipeline evidence add \
+uv run erga evidence add \
   --source-ref 'Career.md#Pipeline project' \
   --text 'Built a Python pipeline that reduced weekly manual review by 30%.' \
   --approved
 ```
 
-The command returns JSON containing an ID such as `ev_a1b2...`. Keep that ID for the next steps.
-
-> [!NOTE]
-> `--approved` means you have verified the statement and allow it to support a résumé proposal. Leave it off for unverified notes.
-
-### 4. Create a local application record
+Use the returned evidence ID to create a local draft:
 
 ```bash
-uv run recruiting-pipeline applications add \
+uv run erga applications add \
   --company 'Example Company' \
   --role 'Software Engineer' \
   --source-url 'https://jobs.example.com/123' \
   --evidence-id 'ev_a1b2...'
 ```
 
-This creates a local record with status `draft`; it does not contact the employer or submit anything.
-
-### 5. Check your local pipeline
+Nothing is sent to the employer. Check local state with:
 
 ```bash
-uv run recruiting-pipeline status
-uv run recruiting-pipeline applications list
+uv run erga status
+uv run erga applications list
 ```
 
-Commands return JSON so they can be inspected directly or used in scripts.
+For résumé setup, mail connectors, job-link routing, and scheduled private alerts, continue with
+the [complete getting-started guide](docs/getting-started.md).
 
-## Résumé workflow
+## MCP and Hermes
 
-The current résumé workflow supports LaTeX files. It does not generate facts on its own; you supply the proposed LaTeX content and the approved evidence IDs that justify it.
-
-### Simple proposal
+Install the optional MCP dependencies, then register the local stdio server:
 
 ```bash
-uv run recruiting-pipeline resume propose \
-  --resume /absolute/path/to/resume.tex \
-  --output-dir /absolute/path/to/proposal \
-  --latex-snippet '\item Built a Python pipeline that reduced weekly manual review by 30\%.' \
-  --evidence-id 'ev_a1b2...'
+uv sync --extra mcp
+
+hermes mcp add erga-mcp \
+  --command "uv --directory /absolute/path/to/erga-mcp run erga-mcp"
 ```
 
-The output directory contains:
+Set `ERGA_MCP_CONFIG` in the MCP environment to the absolute path of your local `config.toml`.
+See [`integrations/hermes/mcp.example.yaml`](integrations/hermes/mcp.example.yaml) for a complete
+example.
 
-```text
-proposal/
-├── proposal.tex        # proposed résumé; the original is untouched
-├── proposal.diff       # unified diff for review
-└── claim-report.json   # approved evidence used by the proposal
-```
-
-### Section-aware proposal
-
-First configure your template and the sections the tool is allowed to edit:
-
-```bash
-uv run recruiting-pipeline resume settings set \
-  --template-path /absolute/path/to/resume.tex \
-  --editable-section Experience \
-  --editable-section Projects \
-  --output-root /absolute/path/to/job-packages
-```
-
-Then append proposed content to one allowed `\section{...}`:
-
-```bash
-uv run recruiting-pipeline resume tailor \
-  --section Experience \
-  --latex-content '\item Built a Python pipeline that reduced weekly manual review by 30\%.' \
-  --output-dir /absolute/path/to/proposal \
-  --evidence-id 'ev_a1b2...'
-```
-
-Existing section content is preserved; the new content is appended in the separate proposal file.
-
-### Compile a proposal locally
-
-```bash
-uv run recruiting-pipeline resume validate \
-  --proposal /absolute/path/to/proposal/proposal.tex
-```
-
-This runs `latexmk` only on the selected proposal. It does not copy the result over your master résumé or synchronize with Overleaf.
-
-## Optional integrations
-
-All integrations are opt-in. The standalone CLI and local SQLite store work without them.
-
-### Obsidian
-
-Set `vault_path` in your local config, then import a Markdown note:
-
-```bash
-uv run recruiting-pipeline obsidian import --note 'Career/Projects.md'
-```
-
-The importer:
-
-- reads only `.md` files inside the configured vault;
-- treats each level-two heading (`##`) as one evidence candidate;
-- never modifies the source note; and
-- imports every candidate as **unapproved**.
-
-At present there is no CLI command to approve an imported record after the fact. Add verified evidence with `evidence add --approved` when you want to use it in an application or résumé proposal.
-
-When application tracking is enabled, job intake preserves existing seasonal tracker conventions
-and creates a missing `<Cycle> Application Tracker.md` plus `<Cycle> Application Notes/` as needed.
-If the posting and package contain no specific season, it files the job under an explicit
-`Unscheduled` tracker instead of guessing from the current date. Multi-cycle postings update every
-named cycle while keeping one detailed note.
-
-### Gmail
-
-Set the provider in `config.toml`:
-
-```toml
-[mail]
-provider = "gmail"
-gws_command = "gws"
-```
-
-After separately installing and authorizing `gws`, fetch a bounded set of Inbox messages:
-
-```bash
-uv run recruiting-pipeline mail sync --limit 20
-```
-
-The connector asks Gmail for message IDs, sender and subject headers, timestamps, and snippets. Classification happens locally. The SQLite store does not retain snippets or message bodies.
-
-### Zoho Mail
-
-The built-in Zoho flow uses Authorization Code + PKCE and requests only these read scopes:
-
-- `ZohoMail.messages.READ`
-- `ZohoMail.folders.READ`
-- `ZohoMail.accounts.READ`
-
-Create a **Mobile-based application** in the Zoho API Console with this exact redirect URI:
-
-```text
-http://127.0.0.1:8765/callback
-```
-
-Then connect and sync:
-
-```bash
-uv run recruiting-pipeline zoho set-client-secret --client-id '<client-id>'
-uv run recruiting-pipeline zoho connect --client-id '<client-id>'
-uv run recruiting-pipeline zoho sync --client-id '<client-id>' --limit 20
-```
-
-The client secret and OAuth tokens are stored through the system credential store using Python's
-`keyring` abstraction. This uses macOS Keychain, Windows Credential Locker, or a supported Linux
-Secret Service backend; credentials are never written to the project configuration. The sync reads
-recent Inbox metadata and cannot mutate messages.
-
-To try classification without OAuth or network access:
-
-```bash
-uv run recruiting-pipeline zoho ingest-fixture \
-  --fixture tests/fixtures/zoho_messages.json
-```
-
-### Hermes / MCP
-
-The optional local stdio MCP server exposes the pipeline to Hermes or another compatible client.
-
-```bash
-hermes mcp add recruiting-pipeline \
-  --command "uv --directory /absolute/path/to/recruiting-pipeline run recruiting-pipeline-mcp"
-```
-
-Set `RECRUITING_PIPELINE_CONFIG` in the MCP server environment to the absolute path of your local `config.toml`. A complete example is available at [`integrations/hermes/mcp.example.yaml`](integrations/hermes/mcp.example.yaml).
-
-The MCP tools fall into two groups:
+Core MCP tools include:
 
 | Tool | Behavior |
 | --- | --- |
@@ -302,119 +177,75 @@ The MCP tools fall into two groups:
 | `list_applications` | Read local application records |
 | `list_evidence` | Read local evidence records |
 | `list_mail_events` | Read normalized local mail events |
-| `intake_job_url` | Run end-to-end research, deterministic résumé tailoring/build, application-record, and tracker intake |
-| `prepare_job_workspace` | Fetch a supplied job URL and create a local job package |
-| `create_tailored_resume` | Create a local proposal, diff, and claim report |
+| `intake_job_url` | Research one job and build local review artifacts end to end |
+| `prepare_job_workspace` | Create a bounded local job package from a supplied URL |
+| `create_tailored_resume` | Create a proposal, diff, and evidence report |
 | `validate_tailored_resume` | Run the configured local LaTeX compiler |
+| `install_mail_monitor_scripts` | Prepare deterministic Hermes notification runners |
+| `export_data` | Build a private ZIP of local records and generated packages |
 
-`intake_job_url` and `prepare_job_workspace` use deterministic lexical relevance ranking. Within
-configured sections, they reorder existing Experience bullets, project blocks/bullets, and every
-Technical Skills category. They never generate claim text. Section names are matched without
-depending on case, spaces, or hyphens. If no meaningful, constraint-valid ordering change exists,
-the proposal is an explicit baseline copy.
+Local-write and local-exec tools remain subject to approval in the invoking MCP client. The full
+capability model is documented in [`docs/security.md`](docs/security.md).
 
-Ranking uses the visible official posting body plus bounded structured job metadata. Executable
-scripts, styles, navigation, and page chrome are removed before storage and scoring. Skill and
-phrase matches require token boundaries, so substrings such as `java` in `javascript`, `rust` in
-`trust`, or `aws` in `laws` do not receive relevance credit.
-
-The claim report records the source, original/output position, matched terms, and approved evidence
-IDs (when exact evidence exists) for every bullet. Configured bullet limits reject newly introduced
-violations while reporting unchanged legacy outliers. Successful builds enforce `max_pages` with a
-pure-Python PDF parser and expose the exact configured PDF path for messaging attachments. A
-completed legacy package is upgraded once when its job URL is pasted again. An incomplete legacy
-package is rebuilt at the same stable path while its original files are preserved in that package's
-`legacy-backup/` directory.
-
-## How data moves through the project
+## Repository map
 
 ```text
-                    ┌──────────────────────────────┐
-Obsidian note ─────►│ unapproved evidence          │
-manual evidence ───►│ approved/unapproved evidence │
-                    │                              │
-Gmail / Zoho ──────►│ normalized mail events       │──► local JSON/status
-                    │                              │
-manual command ────►│ draft applications           │
-                    └──────────────┬───────────────┘
-                                   │ SQLite + audit log
-                                   ▼
-job URL + approved evidence + LaTeX template
-                                   │
-                                   ▼
-              local job package / résumé proposal
+src/erga_mcp/          deterministic domain layer, CLI, and MCP server
+integrations/hermes/  optional Hermes configuration and router plugin
+skills/productivity/  optional workflow skill
+cron/                 private notification runner documentation
+docs/                 architecture, security, setup, and project direction
+tests/                synthetic unit and MCP integration tests
 ```
 
-Mail classification currently uses deterministic phrase matching. It recognizes acknowledgements, assessments, denials, likely recruiting messages, and other mail. Ambiguous or consequential messages are marked for review. Mail events are deduplicated by provider message ID, but they are not yet linked automatically to application records.
+## Documentation
 
-## Privacy and safety
+Start here, in order:
 
-- Personal state is stored outside the repository in your configured local paths.
-- OAuth credentials are not stored in TOML, `.env` files, SQLite, or Git.
-- Email previews may be used during local classification but are not persisted.
-- Obsidian imports are bounded to the configured vault and are read-only.
-- New résumé claims require approved evidence; automatic ordering uses only claims already present in the user-provided template.
-- Proposed LaTeX rejects file-inclusion and shell-execution commands such as `\input` and `\write18`.
-- The MCP server uses stdio rather than opening a network service. It still runs with the permissions of the client that launches it, so review its command, environment, and configured paths.
-- Job descriptions, email text, Markdown, and web pages are treated as untrusted input—not instructions.
-
-See [`docs/security.md`](docs/security.md) for the complete trust boundary and tool capability model.
+1. [`docs/overview.md`](docs/overview.md) — product boundary and system shape.
+2. [`docs/getting-started.md`](docs/getting-started.md) — full local and integration setup.
+3. [`docs/architecture/ADR-001-local-core-and-evidence-ledger.md`](docs/architecture/ADR-001-local-core-and-evidence-ledger.md) — core architecture decision.
+4. [`docs/security.md`](docs/security.md) — trust boundaries and MCP capability model.
+5. [`CONTRIBUTING.md`](CONTRIBUTING.md) — development workflow and acceptance checks.
+6. [`docs/FUTURE.md`](docs/FUTURE.md) — roadmap and explicit non-goals.
+7. [`docs/versioning.md`](docs/versioning.md) — pre-1.0 release policy.
 
 ## Project status
 
-Recruiting Pipeline is **pre-alpha**. The local data model, deterministic mail classification, evidence checks, résumé proposal artifacts, read-only mail connectors, and MCP surface are implemented and tested. Expect rough edges and breaking changes.
+Erga MCP is **pre-alpha**. The evidence ledger, local application store, deterministic mail
+classification, job workspace creation, LaTeX proposal artifacts, read-only mail connectors, and
+MCP surface are implemented and tested. Breaking changes are expected before 1.0.
 
-Current limitations include:
+Current limitations:
 
 - no graphical interface;
-- application records are local drafts with no status-update command;
-- mail events are not automatically matched to application records;
+- no automatic matching between mail events and application records;
 - imported Obsidian candidates cannot yet be approved through the CLI;
-- job matching is lexical keyword overlap, not semantic ranking;
-- résumé editing supports LaTeX only;
-- automatic tailoring is deterministic lexical ranking rather than semantic or generative editing;
-- no Overleaf synchronization; and
-- no automatic applications or outbound messages by design.
-
-The architecture direction is documented in [`docs/architecture/ADR-001-local-core-and-evidence-ledger.md`](docs/architecture/ADR-001-local-core-and-evidence-ledger.md). More detailed setup notes are in [`docs/getting-started.md`](docs/getting-started.md).
-
-## Command reference
-
-```text
-recruiting-pipeline init
-recruiting-pipeline doctor
-recruiting-pipeline status
-
-recruiting-pipeline evidence add
-recruiting-pipeline applications [list|add]
-recruiting-pipeline obsidian import
-recruiting-pipeline mail sync
-
-recruiting-pipeline zoho set-client-secret
-recruiting-pipeline zoho connect
-recruiting-pipeline zoho sync
-recruiting-pipeline zoho ingest-fixture
-
-recruiting-pipeline resume settings [show|set]
-recruiting-pipeline resume create-package
-recruiting-pipeline resume propose
-recruiting-pipeline resume tailor
-recruiting-pipeline resume validate
-```
-
-Run `uv run recruiting-pipeline <command> --help` for all arguments.
+- relevance ranking is lexical rather than semantic;
+- résumé workflows currently target LaTeX; and
+- no remote résumé synchronization or automatic job submission by design.
 
 ## Development
 
 ```bash
 uv sync --extra mcp --extra dev
+uv run ruff format --check .
 uv run ruff check .
 uv run mypy src
-uv run python -m unittest discover -v
+uv run python -m unittest discover -s tests -v
+uv build
+git diff --check
 ```
 
-The test suite uses synthetic data. Do not commit real résumés, email, job applications, OAuth tokens, contact details, or vault contents.
+Tests and examples use synthetic data. Never commit real résumés, applications, email content,
+credentials, contact details, exports, or vault contents.
+
+## Contributing
+
+Issues and pull requests are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md), follow the
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and use private vulnerability reporting described in
+[`SECURITY.md`](SECURITY.md).
 
 ## License
 
-[MIT](LICENSE)
+Erga MCP is available under the [MIT License](LICENSE).

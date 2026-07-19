@@ -1,0 +1,9 @@
+manifest_version: 1
+name: erga-mcp-router
+version: "0.8.0"
+description: Route job links, private recruiting alerts, and native pipeline exports.
+author: Erga MCP contributors
+hermes_requires: ">=0.18.2"
+provides_hooks:
+  - pre_llm_call
+  - transform_llm_output

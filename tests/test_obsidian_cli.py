@@ -7,7 +7,7 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.cli import main
+from erga_mcp.cli import main
 
 
 class ObsidianCliTests(unittest.TestCase):

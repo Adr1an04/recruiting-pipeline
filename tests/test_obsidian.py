@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.integrations.obsidian import import_markdown_evidence
+from erga_mcp.integrations.obsidian import import_markdown_evidence
 
 
 class ObsidianImporterTests(unittest.TestCase):

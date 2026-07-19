@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from recruiting_pipeline.models import Evidence
-from recruiting_pipeline.resume import create_resume_proposal
+from erga_mcp.models import Evidence
+from erga_mcp.resume import create_resume_proposal
 
 
 class ResumeProposalTests(unittest.TestCase):
