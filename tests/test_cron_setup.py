@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -36,8 +37,8 @@ class CronSetupTests(unittest.TestCase):
     def test_installed_mail_runner_emits_an_actionable_message_for_hermes_delivery(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
-            fake_gws = root / "fake-gws.py"
-            fake_gws.write_text(
+            fake_gws_script = root / "fake-gws.py"
+            fake_gws_script.write_text(
                 "#!/usr/bin/env python3\n"
                 "import json, sys\n"
                 "if 'list' in sys.argv:\n"
@@ -54,7 +55,14 @@ class CronSetupTests(unittest.TestCase):
                 "    }))\n",
                 encoding="utf-8",
             )
-            fake_gws.chmod(0o755)
+            if os.name == "nt":
+                fake_gws = root / "fake-gws.cmd"
+                fake_gws.write_text(
+                    f'@"{sys.executable}" "{fake_gws_script}" %*\n', encoding="utf-8"
+                )
+            else:
+                fake_gws = fake_gws_script
+                fake_gws.chmod(0o755)
             config = root / "config.toml"
             config.write_text(
                 '[paths]\ndata_dir = "state"\n'

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,14 +17,16 @@ class ResumeValidationTests(unittest.TestCase):
             root = Path(directory)
             proposal = root / "proposal.tex"
             proposal.write_text("\\begin{document}ok\\end{document}\n", encoding="utf-8")
-            latexmk = root / "fake-latexmk"
-            latexmk.write_text("#!/bin/sh\nprintf 'validated %s\\n' \"$*\"\n", encoding="utf-8")
-            latexmk.chmod(0o755)
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="validated proposal.tex\n", stderr=""
+            )
 
-            result = validate_latex_proposal(proposal, latexmk=latexmk)
+            with patch("erga_mcp.resume.subprocess.run", return_value=completed) as run:
+                result = validate_latex_proposal(proposal, latexmk=Path(sys.executable))
 
             self.assertEqual(result.returncode, 0)
             self.assertIn("proposal.tex", result.stdout)
+            self.assertEqual(run.call_args.args[0][-1], "proposal.tex")
             self.assertEqual(
                 proposal.read_text(encoding="utf-8"), "\\begin{document}ok\\end{document}\n"
             )
@@ -30,13 +35,13 @@ class ResumeValidationTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             texbin = Path(directory)
             latexmk = texbin / "latexmk"
-            latexmk.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-            latexmk.chmod(0o755)
+            latexmk.write_text("synthetic compiler", encoding="utf-8")
 
             with (
                 patch("erga_mcp.resume.sys.platform", "darwin"),
                 patch("erga_mcp.resume.shutil.which", return_value=None),
                 patch("erga_mcp.resume._MACOS_TEXBIN", texbin),
+                patch("erga_mcp.resume.os.access", return_value=True),
             ):
                 resolved = resolve_latexmk_executable(Path("latexmk"))
 
@@ -47,18 +52,26 @@ class ResumeValidationTests(unittest.TestCase):
             root = Path(directory)
             proposal = root / "proposal.tex"
             proposal.write_text("\\begin{document}ok\\end{document}\n", encoding="utf-8")
-            latexmk = root / "fake-latexmk"
-            latexmk.write_text('#!/bin/sh\nfake-tex-engine "$@"\n', encoding="utf-8")
-            latexmk.chmod(0o755)
-            engine = root / "fake-tex-engine"
-            engine.write_text("#!/bin/sh\nprintf 'child engine found\\n'\n", encoding="utf-8")
-            engine.chmod(0o755)
+            compiler_dir = root / "compiler"
+            compiler_dir.mkdir()
+            latexmk = compiler_dir / "latexmk"
+            latexmk.write_text("synthetic compiler", encoding="utf-8")
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="child engine found\n", stderr=""
+            )
 
-            with patch.dict("os.environ", {"PATH": "/usr/bin:/bin"}, clear=False):
+            with (
+                patch.dict("os.environ", {"PATH": os.pathsep.join(("one", "two"))}, clear=False),
+                patch("erga_mcp.resume.shutil.which", return_value=str(latexmk)),
+                patch("erga_mcp.resume.subprocess.run", return_value=completed) as run,
+            ):
                 result = validate_latex_proposal(proposal, latexmk=latexmk)
 
             self.assertEqual(result.returncode, 0)
             self.assertEqual(result.stdout, "child engine found\n")
+            self.assertEqual(
+                run.call_args.kwargs["env"]["PATH"].split(os.pathsep)[0], str(compiler_dir)
+            )
 
 
 if __name__ == "__main__":

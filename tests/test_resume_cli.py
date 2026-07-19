@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from erga_mcp.cli import main
 
@@ -67,22 +70,23 @@ class ResumeCliTests(unittest.TestCase):
             main(["init", "--config", str(config)])
             proposal = root / "proposal.tex"
             proposal.write_text("\\begin{document}ok\\end{document}\n", encoding="utf-8")
-            latexmk = root / "fake-latexmk"
-            latexmk.write_text("#!/bin/sh\nprintf compiled\n", encoding="utf-8")
-            latexmk.chmod(0o755)
-
-            result = self._json_command(
-                [
-                    "resume",
-                    "validate",
-                    "--config",
-                    str(config),
-                    "--proposal",
-                    str(proposal),
-                    "--latexmk",
-                    str(latexmk),
-                ]
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="compiled", stderr=""
             )
+
+            with patch("erga_mcp.resume.subprocess.run", return_value=completed):
+                result = self._json_command(
+                    [
+                        "resume",
+                        "validate",
+                        "--config",
+                        str(config),
+                        "--proposal",
+                        str(proposal),
+                        "--latexmk",
+                        sys.executable,
+                    ]
+                )
 
             self.assertEqual(result["returncode"], 0)
             self.assertEqual(result["stdout"], "compiled")

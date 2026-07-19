@@ -13,10 +13,12 @@ uv sync --extra mcp --extra dev
 ## Before opening a pull request
 
 ```bash
+uv lock --check
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src
 uv run python -m unittest discover -s tests -v
+uv run python -m unittest tests.test_mcp_stdio -v
 uv build
 git diff --check
 ```

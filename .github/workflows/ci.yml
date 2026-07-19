@@ -1,41 +1,47 @@
 name: CI
 
 on:
+  pull_request:
+    branches:
+      - "*"
   push:
     branches:
       - main
-  pull_request:
+  merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   quality:
-    name: Python ${{ matrix.python-version }}
+    name: Quality
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version:
-          - "3.11"
-          - "3.12"
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Install Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
 
       - name: Install dependencies
         run: uv sync --frozen --extra mcp --extra dev
+
+      - name: Verify lock file
+        run: uv lock --check
 
       - name: Check formatting
         run: uv run ruff format --check .
@@ -46,8 +52,110 @@ jobs:
       - name: Type-check
         run: uv run mypy src
 
-      - name: Test
+      - name: Check patch whitespace
+        run: git diff --check
+
+  test:
+    name: ${{ matrix.os-name }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            os-name: Linux
+            python-version: "3.11"
+          - os: ubuntu-latest
+            os-name: Linux
+            python-version: "3.12"
+          - os: ubuntu-latest
+            os-name: Linux
+            python-version: "3.13"
+          - os: ubuntu-latest
+            os-name: Linux
+            python-version: "3.14"
+          - os: macos-latest
+            os-name: macOS
+            python-version: "3.11"
+          - os: macos-latest
+            os-name: macOS
+            python-version: "3.14"
+          - os: windows-latest
+            os-name: Windows
+            python-version: "3.11"
+          - os: windows-latest
+            os-name: Windows
+            python-version: "3.14"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen --extra mcp --extra dev
+
+      - name: Run test suite
         run: uv run python -m unittest discover -s tests -v
 
-      - name: Build distributions
+      - name: Smoke-test CLI
+        run: uv run erga --help
+
+      - name: Smoke-test MCP over stdio
+        run: uv run python -m unittest tests.test_mcp_stdio -v
+
+  package:
+    name: Package
+    needs:
+      - quality
+      - test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Build wheel and source archive
         run: uv build
+
+      - name: Check package metadata
+        run: uvx twine check dist/*
+
+      - name: Test the built wheel
+        run: |
+          uv venv --python 3.11 .package-test
+          wheel_path=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
+          uv pip install --python .package-test/bin/python "${wheel_path}[mcp]"
+          .package-test/bin/erga --help
+          .package-test/bin/python -c "import erga_mcp; print(erga_mcp.__version__)"
+          .package-test/bin/erga-mcp </dev/null
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: erga-mcp-dist
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14

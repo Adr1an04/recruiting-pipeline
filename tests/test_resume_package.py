@@ -4,6 +4,7 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from erga_mcp.resume import create_job_package
 
@@ -48,9 +49,16 @@ class ResumePackageTests(unittest.TestCase):
             outside = Path(directory) / "outside"
             root.mkdir()
             outside.mkdir()
-            (root / "Fall26").symlink_to(outside, target_is_directory=True)
 
-            with self.assertRaisesRegex(ValueError, "must not be a symlink"):
+            real_is_symlink = Path.is_symlink
+
+            def is_synthetic_symlink(path: Path) -> bool:
+                return path == root / "Fall26" or real_is_symlink(path)
+
+            with (
+                patch.object(Path, "is_symlink", autospec=True, side_effect=is_synthetic_symlink),
+                self.assertRaisesRegex(ValueError, "must not be a symlink"),
+            ):
                 create_job_package(
                     output_root=root,
                     cycle="Fall26",
