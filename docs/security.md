@@ -21,7 +21,8 @@ The server declares tool annotations so MCP clients can distinguish its capabili
 | Tools | Capability | Effect |
 | --- | --- | --- |
 | `pipeline_status`, `list_applications`, `list_evidence`, `list_mail_events` | read-only | Reads local SQLite state only. |
-| `intake_job_url` | network-read + local-write | Fetches one validated public job URL and creates or reuses a configured local review package. |
+| `intake_job_url` | network-read + local-write + local-exec | Fetches one validated public job URL; creates or upgrades a local package, deterministically reorders existing user-provided résumé content, compiles and page-validates the proposal, and writes cited research, an application record, and a configured Obsidian tracker note. |
+| `record_secondary_research` | local-write | Stores bounded host-provided search results for an existing job package; results are labeled unverified and separated from official-posting facts. |
 | `prepare_job_workspace` | network-read + local-write | Fetches a job URL and creates configured local package/tracker artifacts. |
 | `create_tailored_resume` | local-write | Writes a reviewable proposal, diff, and claim report inside a configured package. |
 | `validate_tailored_resume` | local-exec | Runs the configured local LaTeX validator on an explicit proposal. |
@@ -46,9 +47,11 @@ and preserves the original hostname for TLS certificate verification. It re-reso
 each redirect, shares one 30-second fetch budget, allows only text/HTML/JSON responses, and caps the
 response at 2 MiB. The pinned transport intentionally ignores ambient HTTP proxy variables; proxy-
 only corporate networks must use an explicitly reviewed future adapter rather than silently
-weakening SSRF controls. Imported page text remains data and is never evaluated as an instruction.
+weakening SSRF controls. Stored snapshots retain visible posting text and bounded structured job
+metadata while removing executable scripts, styles, navigation, and page chrome. Imported page text
+remains data and is never evaluated as an instruction.
 
-Obsidian import is read-only, requires an explicitly configured vault root, rejects paths outside that root, and creates unapproved evidence candidates. Applications and résumé proposals may reference approved evidence only.
+Obsidian import is read-only, requires an explicitly configured vault root, rejects paths outside that root, and creates unapproved evidence candidates. New résumé claims may reference approved evidence only. Automatic job tailoring does not create or rewrite claims: it only reorders claims and skill values already supplied in the source template and records per-claim provenance.
 
 ## Human authority
 

@@ -152,6 +152,43 @@ class PipelineStore:
             for row in rows
         ]
 
+    def update_application_metadata(
+        self,
+        application_id: str,
+        *,
+        company: str,
+        role: str,
+    ) -> Application:
+        """Correct source-derived metadata without changing status, URL, or evidence."""
+        self.initialize()
+        with closing(self._connection()) as connection:
+            row = connection.execute(
+                "SELECT * FROM applications WHERE id = ?", (application_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError("application does not exist")
+            if row["company"] != company or row["role"] != role:
+                connection.execute(
+                    "UPDATE applications SET company = ?, role = ? WHERE id = ?",
+                    (company, role, application_id),
+                )
+                self._record_audit(
+                    connection,
+                    "application.metadata_updated",
+                    application_id,
+                    {"company": company, "role": role},
+                )
+                connection.commit()
+            return Application(
+                id=row["id"],
+                company=company,
+                role=role,
+                source_url=row["source_url"],
+                status=row["status"],
+                evidence_ids=json.loads(row["evidence_ids_json"]),
+                created_at=_as_datetime(row["created_at"]),
+            )
+
     def list_evidence(self) -> list[Evidence]:
         self.initialize()
         with closing(self._connection()) as connection:

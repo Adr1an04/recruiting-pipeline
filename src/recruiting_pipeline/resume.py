@@ -46,6 +46,23 @@ _SECTION_HEADING = re.compile(r"^\\section\{(?P<name>[^}]+)\}\s*$", re.MULTILINE
 _MACOS_TEXBIN = Path("/Library/TeX/texbin")
 
 
+def _section_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.casefold())
+
+
+def resolve_section_name(source: str, requested_name: str) -> str:
+    """Resolve configured section spellings without depending on case or separators."""
+    requested_key = _section_key(requested_name)
+    matches = [
+        match.group("name")
+        for match in _SECTION_HEADING.finditer(source)
+        if _section_key(match.group("name")) == requested_key
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one section matching {requested_name!r}")
+    return matches[0]
+
+
 def resolve_latexmk_executable(latexmk: Path = Path("latexmk")) -> Path:
     """Resolve latexmk even when a macOS launch agent omits MacTeX from PATH."""
     configured = latexmk.expanduser()
@@ -85,11 +102,10 @@ def normalize_cycle(cycle: str) -> str:
 
 def replace_section_contents(source: str, section_name: str, replacement: str) -> str:
     """Replace exactly one top-level LaTex section body without touching other sections."""
+    resolved_name = resolve_section_name(source, section_name)
     matches = [
-        match for match in _SECTION_HEADING.finditer(source) if match.group("name") == section_name
+        match for match in _SECTION_HEADING.finditer(source) if match.group("name") == resolved_name
     ]
-    if len(matches) != 1:
-        raise ValueError(f"expected exactly one section named {section_name!r}")
     start = matches[0].end()
     following = _SECTION_HEADING.search(source, start)
     end = following.start() if following else len(source)
@@ -98,11 +114,10 @@ def replace_section_contents(source: str, section_name: str, replacement: str) -
 
 def append_section_contents(source: str, section_name: str, addition: str) -> str:
     """Append to one section body without removing existing résumé content."""
+    resolved_name = resolve_section_name(source, section_name)
     matches = [
-        match for match in _SECTION_HEADING.finditer(source) if match.group("name") == section_name
+        match for match in _SECTION_HEADING.finditer(source) if match.group("name") == resolved_name
     ]
-    if len(matches) != 1:
-        raise ValueError(f"expected exactly one section named {section_name!r}")
     following = _SECTION_HEADING.search(source, matches[0].end())
     insertion = following.start() if following else len(source)
     prefix = source[:insertion].rstrip() + "\n"

@@ -7,17 +7,16 @@ import ssl
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from html import unescape
 from http.client import HTTPConnection, HTTPResponse, HTTPSConnection
 from queue import Empty, Queue
 from threading import Lock, Thread
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
+from .job_research import build_job_snapshot
 from .models import Evidence
 
 _WORD = re.compile(r"[a-zA-Z][a-zA-Z0-9+#.-]{2,}")
-_TAG = re.compile(r"<[^>]+>")
 _STOP_WORDS = frozenset({"and", "for", "from", "into", "that", "the", "with", "you", "your"})
 _MAX_JOB_PAGE_BYTES = 2 * 1024 * 1024
 _ALLOWED_JOB_CONTENT_TYPES = frozenset(
@@ -464,7 +463,7 @@ def _fetch_job_snapshot_with_deadline(
             cancellation.unregister_connection(connection)
             response.close()
             connection.close()
-    text = " ".join(unescape(_TAG.sub(" ", html)).split())
+    text = build_job_snapshot(html)
     if not text:
         raise ValueError("job page did not contain readable text")
     return text

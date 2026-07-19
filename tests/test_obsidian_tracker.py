@@ -8,6 +8,54 @@ from recruiting_pipeline.integrations.obsidian_tracker import write_job_tracker_
 
 
 class ObsidianTrackerTests(unittest.TestCase):
+    def test_accepts_obsidian_formatted_table_column_widths(self) -> None:
+        with TemporaryDirectory() as directory:
+            tracker = Path(directory)
+            tracker_path = tracker / "Fall 2026 Application Tracker.md"
+            tracker_path.write_text(
+                "# Fall 2026\n\n## Application tracker\n\n"
+                "| Company   | Role                | Location / work mode | Source | "
+                "Status      | Applied | Next action       | Contact / link |\n"
+                "| --------- | ------------------- | -------------------- | ------ | "
+                "----------- | ------- | ----------------- | -------------- |\n"
+                "| Existing  | Existing role       | Remote               | Link   | "
+                "Researching |         | Review            | Note           |\n",
+                encoding="utf-8",
+            )
+
+            write_job_tracker_note(
+                tracker_dir=tracker,
+                cycle="Fall 2026",
+                company="Example Co",
+                role="Software Engineer Intern",
+                job_url="https://jobs.example.test/123",
+                package_dir=tracker / "package",
+            )
+
+            rendered = tracker_path.read_text(encoding="utf-8")
+            self.assertIn("[[Example Co — Software Engineer Intern]]", rendered)
+            self.assertIn("| Existing  | Existing role", rendered)
+
+    def test_creates_an_unscheduled_tracker_when_no_time_bucket_exists(self) -> None:
+        with TemporaryDirectory() as directory:
+            tracker = Path(directory)
+            note = write_job_tracker_note(
+                tracker_dir=tracker,
+                cycle="Unscheduled",
+                company="Example Co",
+                role="New Graduate Engineer",
+                job_url="https://jobs.example.test/unscheduled",
+                package_dir=tracker / "package",
+                posting_cycles=(),
+            )
+
+            self.assertEqual(note.parent.name, "Unscheduled Application Notes")
+            self.assertTrue((tracker / "Unscheduled Application Tracker.md").is_file())
+            self.assertIn(
+                "[[Example Co — New Graduate Engineer]]",
+                (tracker / "Unscheduled Application Tracker.md").read_text(encoding="utf-8"),
+            )
+
     def test_creates_reviewable_job_note_with_package_link(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -51,6 +99,83 @@ class ObsidianTrackerTests(unittest.TestCase):
                     package_dir=root / "applications" / "Fall26" / "ExampleCo",
                 ),
             )
+
+    def test_matches_application_tracker_and_notes_vault_convention(self) -> None:
+        with TemporaryDirectory() as directory:
+            tracker = Path(directory)
+            for cycle, filename in (
+                ("Fall 2026", "Fall 2026 Application Tracker.md"),
+                ("Summer 2027", "Summer 2027 Applications.md"),
+            ):
+                (tracker / filename).write_text(
+                    f"# {cycle}\n\n## Application tracker\n\n"
+                    "| Company | Role | Location / work mode | Source | Status | Applied | "
+                    "Next action | Contact / link |\n"
+                    "| --- | --- | --- | --- | --- | --- | --- | --- |\n",
+                    encoding="utf-8",
+                )
+
+            research = tracker / "package" / "research" / "role-research.md"
+            research.parent.mkdir(parents=True)
+            research.write_text("research\n", encoding="utf-8")
+            pdf = tracker / "package" / "artifacts" / "Candidate.pdf"
+            pdf.parent.mkdir()
+            pdf.write_bytes(b"pdf")
+            note = write_job_tracker_note(
+                tracker_dir=tracker,
+                cycle="Fall 2026",
+                additional_cycles=("Summer 2027",),
+                company="Example Voice",
+                role="Software Engineering Internship",
+                location="Remote — United States",
+                compensation="$55–$65/hour",
+                job_url="https://jobs.example.test/123",
+                package_dir=tracker / "package",
+                resume_pdf=pdf,
+                research_path=research,
+                research_highlights=("Ship an end-to-end project.",),
+                application_constraints=("No more than two applications.",),
+            )
+
+            self.assertEqual(
+                note,
+                (
+                    tracker
+                    / "Fall 2026 Application Notes"
+                    / "Example Voice — Software Engineering Internship.md"
+                ).resolve(),
+            )
+            note_text = note.read_text(encoding="utf-8")
+            self.assertIn("[[Fall 2026 Application Tracker]]", note_text)
+            self.assertIn("[[Summer 2027 Applications]]", note_text)
+            self.assertIn("Remote — United States", note_text)
+            self.assertIn("Ship an end-to-end project", note_text)
+            for filename in (
+                "Fall 2026 Application Tracker.md",
+                "Summer 2027 Applications.md",
+            ):
+                self.assertIn(
+                    "[[Example Voice — Software Engineering Internship]]",
+                    (tracker / filename).read_text(encoding="utf-8"),
+                )
+
+            original = note.read_text(encoding="utf-8")
+            repeated = write_job_tracker_note(
+                tracker_dir=tracker,
+                cycle="Fall 2026",
+                additional_cycles=("Summer 2027",),
+                company="Example Voice",
+                role="Software Engineering Internship",
+                location="Remote — United States",
+                compensation="$55–$65/hour",
+                job_url="https://jobs.example.test/123",
+                package_dir=tracker / "package",
+                resume_pdf=pdf,
+                research_path=research,
+                research_highlights=("Ship an end-to-end project.",),
+                application_constraints=("No more than two applications.",),
+            )
+            self.assertEqual(repeated.read_text(encoding="utf-8"), original)
 
 
 if __name__ == "__main__":

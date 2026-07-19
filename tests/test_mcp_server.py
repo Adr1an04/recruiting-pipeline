@@ -12,7 +12,11 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from recruiting_pipeline.config import DEFAULT_CONFIG
-from recruiting_pipeline.mcp_server import _metadata_from_url, build_server
+from recruiting_pipeline.mcp_server import (
+    _compile_intake_proposal,
+    _metadata_from_url,
+    build_server,
+)
 from recruiting_pipeline.resume import LatexValidation
 
 
@@ -77,6 +81,7 @@ class McpServerTests(unittest.TestCase):
                     "list_evidence",
                     "list_mail_events",
                     "intake_job_url",
+                    "record_secondary_research",
                     "prepare_job_workspace",
                     "create_tailored_resume",
                     "validate_tailored_resume",
@@ -204,6 +209,256 @@ class McpServerTests(unittest.TestCase):
             }:
                 self.assertTrue(Path(str(first[key])).is_file(), key)
 
+    def test_primary_intake_builds_and_returns_the_exact_tailored_pdf(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            template = root / "resume.tex"
+            template.write_text(
+                "\\section{Experience}\n"
+                "\\resumeSubheading{Engineer}{2026}{Example}{Remote}\n"
+                "\\resumeItemListStart\n"
+                "\\resumeItem{Designed marketing websites with React.}\n"
+                "\\resumeItem{Built Python low-latency services with FastAPI.}\n"
+                "\\resumeItemListEnd\n",
+                encoding="utf-8",
+            )
+            config_path = root / "config.toml"
+            config_path.write_text(
+                DEFAULT_CONFIG.replace('template_path = ""', 'template_path = "resume.tex"')
+                .replace("editable_sections = []", 'editable_sections = ["experience"]')
+                .replace(
+                    'output_pdf_name = "Firstname_Lastname_Resume.pdf"',
+                    'output_pdf_name = "Candidate_Resume.pdf"',
+                ),
+                encoding="utf-8",
+            )
+            server = build_server(config_path)
+            job_url = "https://jobs.example.test/python-intern"
+            validation = LatexValidation(command=("latexmk",), returncode=0, stdout="", stderr="")
+
+            def compile_success(proposal_path: Path, **_: Any) -> LatexValidation:
+                proposal_path.with_suffix(".pdf").write_bytes(b"exact tailored pdf")
+                return validation
+
+            with (
+                patch(
+                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    return_value="Python FastAPI low-latency software internship",
+                ),
+                patch(
+                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    side_effect=compile_success,
+                ),
+            ):
+                call: Any = asyncio.run(server.call_tool("intake_job_url", {"job_url": job_url}))
+
+            result = cast(dict[str, Any], call[1])
+            proposed = Path(result["proposal_tex"]).read_text(encoding="utf-8")
+            self.assertLess(proposed.index("Built Python"), proposed.index("Designed marketing"))
+            self.assertGreater(Path(result["diff"]).stat().st_size, 0)
+            self.assertTrue(result["tailoring_meaningful_change"])
+            self.assertEqual(result["tailoring_changed_sections"], ["Experience"])
+            self.assertEqual(result["tailoring_version"], 4)
+            output_pdf = Path(result["validation"]["pdf"])
+            self.assertEqual(output_pdf.name, "Candidate_Resume.pdf")
+            self.assertEqual(output_pdf.read_bytes(), b"exact tailored pdf")
+            manifest = json.loads(
+                (Path(result["package_dir"]) / "package.json").read_text(encoding="utf-8")
+            )
+            self.assertTrue(manifest["tailoring"]["meaningful_change"])
+            self.assertEqual(manifest["tailoring"]["version"], 4)
+
+    def test_rebuilds_an_incomplete_legacy_package_and_preserves_its_files(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            template = root / "resume.tex"
+            template.write_text(
+                "\\section{Experience}\n"
+                "\\resumeSubheading{Engineer}{2026}{Example}{Remote}\n"
+                "\\resumeItemListStart\n"
+                "\\resumeItem{Built marketing pages with React.}\n"
+                "\\resumeItem{Built production Python services.}\n"
+                "\\resumeItemListEnd\n",
+                encoding="utf-8",
+            )
+            config_path = root / "config.toml"
+            config_path.write_text(
+                DEFAULT_CONFIG.replace(
+                    'template_path = ""', 'template_path = "resume.tex"'
+                ).replace("editable_sections = []", 'editable_sections = ["experience"]'),
+                encoding="utf-8",
+            )
+            job_url = "https://jobs.example.test/python-intern"
+            legacy = root / "output" / "fall-2026" / "legacy-python-intern"
+            (legacy / "artifacts").mkdir(parents=True)
+            (legacy / "artifacts" / "old-resume.tex").write_text(
+                "unsupported legacy content", encoding="utf-8"
+            )
+            (legacy / "package.json").write_text(
+                json.dumps({"job_url": job_url, "template_status": "not_copied"}),
+                encoding="utf-8",
+            )
+            server = build_server(config_path)
+            validation = LatexValidation(command=("latexmk",), returncode=0, stdout="", stderr="")
+
+            def compile_success(proposal_path: Path, **_: Any) -> LatexValidation:
+                proposal_path.with_suffix(".pdf").write_bytes(b"rebuilt pdf")
+                return validation
+
+            with (
+                patch(
+                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    return_value="Python software engineering internship",
+                ),
+                patch(
+                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    side_effect=compile_success,
+                ),
+            ):
+                call: Any = asyncio.run(server.call_tool("intake_job_url", {"job_url": job_url}))
+
+            result = cast(dict[str, Any], call[1])
+            repaired = Path(result["package_dir"])
+            self.assertEqual(repaired, legacy)
+            self.assertTrue((repaired / "source" / "resume.tex").is_file())
+            self.assertTrue((repaired / "artifacts" / "proposal.diff").is_file())
+            self.assertTrue((repaired / "legacy-backup" / "legacy-package.json").is_file())
+            self.assertEqual(
+                (repaired / "legacy-backup" / "artifacts" / "old-resume.tex").read_text(
+                    encoding="utf-8"
+                ),
+                "unsupported legacy content",
+            )
+            manifest = json.loads((repaired / "package.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["legacy_backup"], "legacy-backup")
+            self.assertEqual(manifest["tailoring"]["version"], 4)
+            self.assertIn("Legacy package preserved", result["integration_warnings"][-1])
+
+    def test_compile_rejects_a_pdf_over_the_configured_page_cap(self) -> None:
+        with TemporaryDirectory() as directory:
+            proposal = Path(directory) / "proposal.tex"
+            proposal.write_text("synthetic", encoding="utf-8")
+            validation = LatexValidation(command=("latexmk",), returncode=0, stdout="", stderr="")
+
+            def compile_two_pages(proposal_path: Path, **_: Any) -> LatexValidation:
+                proposal_path.with_suffix(".pdf").write_bytes(
+                    b"%PDF-1.4\n1 0 obj<</Type /Page>>endobj\n2 0 obj<</Type /Page>>endobj\n%%EOF"
+                )
+                return validation
+
+            with patch(
+                "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                side_effect=compile_two_pages,
+            ):
+                result = _compile_intake_proposal(
+                    proposal,
+                    latexmk="latexmk",
+                    output_pdf_name="Candidate_Resume.pdf",
+                    max_pages=1,
+                )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.page_count, 2)
+            self.assertIsNone(result.pdf)
+            self.assertIn("configured maximum is 1", result.skipped or "")
+            self.assertFalse(proposal.with_suffix(".pdf").exists())
+
+    def test_primary_intake_writes_research_application_and_multicycle_obsidian_note(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "resume.tex").write_text(
+                "\\section{Experience}\nVerified work.\n", encoding="utf-8"
+            )
+            tracker = root / "tracker"
+            tracker.mkdir()
+            for cycle, filename in (
+                ("Fall 2026", "Fall 2026 Application Tracker.md"),
+                ("Summer 2027", "Summer 2027 Applications.md"),
+            ):
+                (tracker / filename).write_text(
+                    f"# {cycle}\n\n## Application tracker\n\n"
+                    "| Company | Role | Location / work mode | Source | Status | Applied | "
+                    "Next action | Contact / link |\n"
+                    "| --- | --- | --- | --- | --- | --- | --- | --- |\n",
+                    encoding="utf-8",
+                )
+            config_path = root / "config.toml"
+            config_path.write_text(
+                DEFAULT_CONFIG.replace(
+                    'template_path = ""', 'template_path = "resume.tex"'
+                ).replace(
+                    'enabled = false\ntracker_dir = ""',
+                    'enabled = true\ntracker_dir = "tracker"',
+                ),
+                encoding="utf-8",
+            )
+            posting = {
+                "@context": "https://schema.org/",
+                "@type": "JobPosting",
+                "title": "Software Engineering Internship (Fall 2026/Summer 2027)",
+                "description": "Ship a project end to end using Codex for real-time voice AI.",
+                "hiringOrganization": {"name": "Example Voice"},
+                "jobLocationType": "TELECOMMUTE",
+                "applicantLocationRequirements": {"name": "United States"},
+            }
+            snapshot = "Role @ Example Voice " + json.dumps(posting)
+            server = build_server(config_path)
+            job_url = "https://jobs.ashbyhq.com/example/00000000-0000-0000-0000-000000000000"
+            validation = LatexValidation(command=("latexmk",), returncode=0, stdout="", stderr="")
+
+            def compile_success(proposal_path: Path, **_: Any) -> LatexValidation:
+                proposal_path.with_suffix(".pdf").write_bytes(b"synthetic pdf")
+                return validation
+
+            with (
+                patch(
+                    "recruiting_pipeline.mcp_server.fetch_job_snapshot",
+                    return_value=snapshot,
+                ) as fetch,
+                patch(
+                    "recruiting_pipeline.mcp_server.validate_latex_proposal",
+                    side_effect=compile_success,
+                ),
+            ):
+                first_call: Any = asyncio.run(
+                    server.call_tool("intake_job_url", {"job_url": job_url})
+                )
+                second_call: Any = asyncio.run(
+                    server.call_tool("intake_job_url", {"job_url": job_url})
+                )
+
+            first = cast(dict[str, Any], first_call[1])
+            second = cast(dict[str, Any], second_call[1])
+            self.assertTrue(Path(first["research_note"]).is_file())
+            self.assertIsNotNone(first["application_id"])
+            self.assertEqual(Path(first["package_dir"]).parent.name, "fall-2026")
+            self.assertTrue(
+                Path(first["package_dir"]).name.startswith(
+                    "example-voice-software-engineering-internship-"
+                )
+            )
+            self.assertEqual(first["tracker_cycles"], ["Fall 2026", "Summer 2027"])
+            self.assertEqual(first["integration_warnings"], [])
+            self.assertEqual(first["tracker_notes"], second["tracker_notes"])
+            self.assertEqual(first["application_id"], second["application_id"])
+            fetch.assert_called_once_with(job_url)
+
+            note = Path(first["tracker_notes"][0])
+            self.assertEqual(note.parent.name, "Fall 2026 Application Notes")
+            self.assertIn("Role research", note.read_text(encoding="utf-8"))
+            for filename in (
+                "Fall 2026 Application Tracker.md",
+                "Summer 2027 Applications.md",
+            ):
+                tracker_text = (tracker / filename).read_text(encoding="utf-8")
+                self.assertEqual(
+                    tracker_text.count("[[Example Voice — Software Engineering Internship]]"),
+                    1,
+                )
+
+            applications: Any = asyncio.run(server.call_tool("list_applications", {}))
+            self.assertEqual(len(applications[1]), 1)
+
     def test_tracking_only_url_changes_reuse_the_same_completed_package(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -264,7 +519,7 @@ class McpServerTests(unittest.TestCase):
                     return_value="Software engineering internship",
                 ),
                 patch(
-                    "recruiting_pipeline.mcp_server.create_baseline_resume_proposal",
+                    "recruiting_pipeline.mcp_server.create_automatic_resume_proposal",
                     side_effect=RuntimeError("synthetic proposal failure"),
                 ),
                 self.assertRaisesRegex(Exception, "synthetic proposal failure"),
@@ -345,7 +600,7 @@ class McpServerTests(unittest.TestCase):
             self.assertIsNone(second["validation"]["returncode"])
             self.assertIn("did not complete", second["validation"]["skipped"])
             self.assertTrue(second["reused"])
-            validate.assert_called_once()
+            self.assertEqual(validate.call_count, 2)
             manifest = json.loads(
                 (Path(first["package_dir"]) / "package.json").read_text(encoding="utf-8")
             )

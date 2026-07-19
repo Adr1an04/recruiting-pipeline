@@ -30,6 +30,24 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(store.list_applications(), [application])
             self.assertEqual(store.audit_events()[0].action, "application.created")
 
+            updated = store.update_application_metadata(
+                application.id,
+                company="Correct Example Systems",
+                role="Software Engineering Intern",
+            )
+            self.assertEqual(updated.company, "Correct Example Systems")
+            self.assertEqual(updated.role, "Software Engineering Intern")
+            self.assertEqual(updated.status, application.status)
+            self.assertEqual(updated.evidence_ids, application.evidence_ids)
+            audit_count = len(store.audit_events())
+            self.assertEqual(store.audit_events()[0].action, "application.metadata_updated")
+            store.update_application_metadata(
+                application.id,
+                company="Correct Example Systems",
+                role="Software Engineering Intern",
+            )
+            self.assertEqual(len(store.audit_events()), audit_count)
+
 
 if __name__ == "__main__":
     unittest.main()

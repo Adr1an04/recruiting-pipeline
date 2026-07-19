@@ -1,39 +1,201 @@
 from __future__ import annotations
 
+import re
+from collections.abc import Sequence
 from pathlib import Path
+
+_TABLE_HEADER = (
+    "| Company | Role | Location / work mode | Source | Status | Applied | "
+    "Next action | Contact / link |"
+)
+_TABLE_DIVIDER = "| --- | --- | --- | --- | --- | --- | --- | --- |"
+_MANAGED_START = "<!-- recruiting-pipeline:start -->"
+_MANAGED_END = "<!-- recruiting-pipeline:end -->"
+_EXPECTED_TABLE_COLUMNS = (
+    "company",
+    "role",
+    "location / work mode",
+    "source",
+    "status",
+    "applied",
+    "next action",
+    "contact / link",
+)
 
 
 def _safe_name(value: str) -> str:
-    cleaned = "".join(char if char.isalnum() or char in " -_" else "" for char in value).strip()
+    cleaned = "".join(char if char.isalnum() or char in " -_&()'" else " " for char in value)
+    cleaned = " ".join(cleaned.split())
     if not cleaned or cleaned in {".", ".."}:
-        raise ValueError("company and role must contain a safe display name")
+        raise ValueError("company, role, and cycle must contain a safe display name")
     return cleaned
 
 
-def _upsert_cycle_tracker(
-    *, tracker_dir: Path, cycle: str, company: str, role: str, job_url: str, note_name: str
-) -> None:
-    """Record a job once in its configured cycle tracker, never in a top-level Projects note."""
-    cycle_path = tracker_dir / f"{cycle} Applications.md"
-    if not cycle_path.is_file():
-        raise ValueError(f"cycle tracker does not exist: {cycle_path.name}")
-    text = cycle_path.read_text(encoding="utf-8")
-    header = (
-        "| Company | Role | Location / work mode | Source | Status | Applied | "
-        "Next action | Contact / link |"
+def _table_cell(value: str | None) -> str:
+    return " ".join((value or "").split()).replace("|", r"\|")
+
+
+def _table_cells(line: str) -> tuple[str, ...]:
+    stripped = line.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return ()
+    return tuple(cell.strip() for cell in stripped[1:-1].split("|"))
+
+
+def _application_table_divider_line(lines: list[str]) -> int | None:
+    for index, line in enumerate(lines[:-1]):
+        header = tuple(cell.casefold() for cell in _table_cells(line))
+        if header != _EXPECTED_TABLE_COLUMNS:
+            continue
+        divider = _table_cells(lines[index + 1])
+        if len(divider) != len(_EXPECTED_TABLE_COLUMNS):
+            continue
+        if all(re.fullmatch(r":?-{3,}:?", cell) for cell in divider):
+            return index + 1
+    return None
+
+
+def _tracker_path(tracker_dir: Path, cycle: str) -> Path:
+    candidates = (
+        tracker_dir / f"{cycle} Application Tracker.md",
+        tracker_dir / f"{cycle} Applications.md",
     )
-    divider = "| --- | --- | --- | --- | --- | --- | --- | --- |"
-    if header not in text or divider not in text:
-        raise ValueError(f"cycle tracker has no application table: {cycle_path.name}")
+    existing = [path for path in candidates if path.is_file()]
+    if len(existing) == 1:
+        return existing[0]
+    if len(existing) > 1:
+        raise ValueError(f"multiple cycle trackers exist for {cycle}")
+    target = candidates[0]
+    if target.exists():
+        raise ValueError(f"cycle tracker must be a regular file: {target.name}")
+    target.write_text(
+        f"# {cycle} Applications\n\n"
+        "Local application tracking managed by Recruiting Pipeline. "
+        "Rows remain reviewable and may be edited in Obsidian.\n\n"
+        "## Application tracker\n\n"
+        f"{_TABLE_HEADER}\n{_TABLE_DIVIDER}\n",
+        encoding="utf-8",
+    )
+    return target
+
+
+def _notes_dir(tracker_dir: Path, cycle: str, tracker_path: Path) -> Path:
+    if tracker_path.stem.endswith("Application Tracker"):
+        name = f"{cycle} Application Notes"
+    else:
+        name = f"{cycle} Applications"
+    return tracker_dir / name
+
+
+def _render_tracker_update(
+    *,
+    tracker_path: Path,
+    company: str,
+    role: str,
+    location: str | None,
+    job_url: str,
+    note_name: str,
+) -> str:
+    text = tracker_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    divider_line = _application_table_divider_line(lines)
+    if divider_line is None:
+        raise ValueError(f"cycle tracker has no application table: {tracker_path.name}")
     marker = f"[[{note_name}]]"
     if marker in text:
-        return
+        return text
     row = (
-        f"| {company} | {role} |  | [Posting]({job_url}) | Researching |  | "
-        f"Review role requirements and decide whether to apply. | {marker} |"
+        f"| {_table_cell(company)} | {_table_cell(role)} | {_table_cell(location)} | "
+        f"[Posting]({job_url}) | Researching |  | Review role requirements and decide "
+        f"whether to apply. | {marker} |"
     )
-    text = text.replace(divider, divider + "\n" + row, 1)
-    cycle_path.write_text(text, encoding="utf-8")
+    lines.insert(divider_line + 1, row)
+    return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+
+
+def _managed_note_block(
+    *,
+    tracker_stems: Sequence[str],
+    job_url: str,
+    package_dir: Path,
+    location: str | None,
+    compensation: str | None,
+    resume_pdf: Path | None,
+    research_path: Path | None,
+    research_highlights: Sequence[str],
+    research_responsibilities: Sequence[str],
+    research_ambiguities: Sequence[str],
+    application_constraints: Sequence[str],
+    posting_cycles: Sequence[str],
+) -> str:
+    cycle_links = ", ".join(f"[[{stem}]]" for stem in tracker_stems)
+    lines = [
+        _MANAGED_START,
+        f"- Filed in: {cycle_links}",
+        "- Status: Researching",
+    ]
+    if posting_cycles:
+        lines.append(f"- Posting cycle(s): {', '.join(posting_cycles)}")
+    if location:
+        lines.append(f"- Location / work mode: {location}")
+    if compensation:
+        lines.append(f"- Compensation: {compensation}")
+    lines.extend(
+        [
+            f"- Job URL: {job_url}",
+            f"- Package: `{package_dir.expanduser().resolve()}`",
+        ]
+    )
+    if resume_pdf is not None:
+        lines.append(f"- Resume PDF: `{resume_pdf.expanduser().resolve()}`")
+    if research_path is not None:
+        lines.append(f"- Role research: `{research_path.expanduser().resolve()}`")
+    lines.extend(
+        [
+            "- Next action: Review the tailored résumé, role research, and "
+            "application constraints.",
+            "",
+            "## Resume / portfolio emphasis",
+            "",
+            "Generated from approved career evidence; see the package claim report.",
+            "",
+            "## Role research",
+            "",
+        ]
+    )
+    lines.extend(f"- {item}" for item in research_highlights)
+    if not research_highlights:
+        lines.append("- Review the preserved official job description in the local package.")
+    lines.extend(["", "## Responsibilities", ""])
+    lines.extend(f"- {item}" for item in research_responsibilities)
+    if not research_responsibilities:
+        lines.append("- No distinct responsibilities section was extracted.")
+    lines.extend(["", "## Ambiguities to verify", ""])
+    lines.extend(f"- {item}" for item in research_ambiguities)
+    if not research_ambiguities:
+        lines.append("- No internal contradiction was detected in the captured posting.")
+    lines.extend(["", "## Application constraints", ""])
+    lines.extend(f"- {item}" for item in application_constraints)
+    if not application_constraints:
+        lines.append("- No application-frequency or deadline constraint was found in the posting.")
+    lines.append(_MANAGED_END)
+    return "\n".join(lines)
+
+
+def _upsert_managed_note(note_path: Path, *, title: str, managed_block: str) -> None:
+    if not note_path.exists():
+        note_path.write_text(f"# {title}\n\n{managed_block}\n", encoding="utf-8")
+        return
+    text = note_path.read_text(encoding="utf-8")
+    start = text.find(_MANAGED_START)
+    end = text.find(_MANAGED_END)
+    if start >= 0 and end >= start:
+        end += len(_MANAGED_END)
+        rendered = text[:start] + managed_block + text[end:]
+    else:
+        rendered = text.rstrip() + "\n\n" + managed_block + "\n"
+    if rendered != text:
+        note_path.write_text(rendered, encoding="utf-8")
 
 
 def write_job_tracker_note(
@@ -45,38 +207,64 @@ def write_job_tracker_note(
     job_url: str,
     package_dir: Path,
     resume_pdf: Path | None = None,
+    additional_cycles: Sequence[str] = (),
+    location: str | None = None,
+    compensation: str | None = None,
+    research_path: Path | None = None,
+    research_highlights: Sequence[str] = (),
+    research_responsibilities: Sequence[str] = (),
+    research_ambiguities: Sequence[str] = (),
+    application_constraints: Sequence[str] = (),
+    posting_cycles: Sequence[str] = (),
 ) -> Path:
-    """Create the detailed note below its cycle and update the cycle tracker."""
+    """Upsert a detailed note and create/update every named local cycle tracker."""
     if not job_url.startswith(("https://", "http://")):
         raise ValueError("job URL must use HTTP(S)")
     safe_company, safe_role = _safe_name(company), _safe_name(role)
-    notes_dir = tracker_dir.expanduser().resolve()
-    notes_dir.mkdir(parents=True, exist_ok=True)
+    cycles: list[str] = []
+    for raw_cycle in (cycle, *additional_cycles):
+        safe_cycle = _safe_name(raw_cycle)
+        if safe_cycle not in cycles:
+            cycles.append(safe_cycle)
+
+    notes_root = tracker_dir.expanduser().resolve()
+    notes_root.mkdir(parents=True, exist_ok=True)
+    tracker_paths = [_tracker_path(notes_root, item) for item in cycles]
     note_name = f"{safe_company} — {safe_role}"
-    cycle_notes_dir = notes_dir / f"{cycle} Applications"
+    rendered_trackers = [
+        (
+            path,
+            _render_tracker_update(
+                tracker_path=path,
+                company=safe_company,
+                role=safe_role,
+                location=location,
+                job_url=job_url,
+                note_name=note_name,
+            ),
+        )
+        for path in tracker_paths
+    ]
+
+    cycle_notes_dir = _notes_dir(notes_root, cycles[0], tracker_paths[0])
     cycle_notes_dir.mkdir(exist_ok=True)
     note_path = cycle_notes_dir / f"{note_name}.md"
-    relative_package = package_dir.expanduser().resolve().as_posix()
-    if not note_path.exists():
-        pdf_line = f"- Resume PDF: `{resume_pdf.expanduser().resolve()}`\n" if resume_pdf else ""
-        note_path.write_text(
-            f"# {note_name}\n\n"
-            f"- Cycle: [[{cycle} Applications]]\n"
-            "- Status: Researching\n"
-            f"- Job URL: {job_url}\n"
-            f"- Package: `{relative_package}`\n"
-            f"{pdf_line}"
-            "- Next action: Review tailored résumé and job requirements.\n\n"
-            "## Resume / portfolio emphasis\n\n"
-            "Generated from approved career evidence; see the package claim report.\n",
-            encoding="utf-8",
-        )
-    _upsert_cycle_tracker(
-        tracker_dir=notes_dir,
-        cycle=cycle,
-        company=safe_company,
-        role=safe_role,
+    managed_block = _managed_note_block(
+        tracker_stems=[path.stem for path in tracker_paths],
         job_url=job_url,
-        note_name=note_name,
+        package_dir=package_dir,
+        location=location,
+        compensation=compensation,
+        resume_pdf=resume_pdf,
+        research_path=research_path,
+        research_highlights=research_highlights,
+        research_responsibilities=research_responsibilities,
+        research_ambiguities=research_ambiguities,
+        application_constraints=application_constraints,
+        posting_cycles=posting_cycles,
     )
+    _upsert_managed_note(note_path, title=note_name, managed_block=managed_block)
+    for tracker_path, rendered in rendered_trackers:
+        if rendered != tracker_path.read_text(encoding="utf-8"):
+            tracker_path.write_text(rendered, encoding="utf-8")
     return note_path

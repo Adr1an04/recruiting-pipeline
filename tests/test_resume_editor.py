@@ -21,6 +21,13 @@ class ResumeEditorTests(unittest.TestCase):
             "\\section{Experience}\nnew experience\n\\section{Projects}\nold project\n",
         )
 
+    def test_resolves_configured_section_case_and_separators(self) -> None:
+        source = "\\section{Technical Skills}\nold skills\n"
+        self.assertEqual(
+            replace_section_contents(source, "technical-skills", "new skills"),
+            "\\section{Technical Skills}\nnew skills\n",
+        )
+
     def test_rejects_missing_or_ambiguous_sections(self) -> None:
         with self.assertRaises(ValueError):
             replace_section_contents("\\section{Projects}\nx\n", "Experience", "new")

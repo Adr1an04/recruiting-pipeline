@@ -38,7 +38,7 @@ The project is intentionally conservative: it prepares and organizes work, but *
 | Read bounded Gmail or Zoho inbox metadata | Send, delete, label, or modify email |
 | Classify common recruiting messages with simple rules | Automatically change an application's status |
 | Create reviewable LaTeX résumé proposals | Modify your original résumé or push to Overleaf |
-| Create local job/research folders through MCP | Act as a full applicant-tracking system or job-search UI |
+| Create local packages, cited job research, and configured Obsidian tracker notes | Act as a job-submission bot or job-search UI |
 
 ## The core idea: evidence before résumé bullets
 
@@ -59,7 +59,11 @@ Reviewable LaTeX proposal + diff + claim report
       You review it
 ```
 
-Every résumé proposal must reference at least one approved evidence record. The tool writes the proposal to a separate output folder, leaves the source résumé unchanged, and records the evidence used in `claim-report.json`.
+New résumé claims must match approved evidence. Automatic job intake takes the narrower path of
+reordering claims and skills already present in the user-provided template; it does not rewrite
+their text. The tool writes the proposal to a separate output folder, leaves the source résumé
+unchanged, and records template or approved-evidence provenance for every claim in
+`claim-report.json`.
 
 ## Quick start
 
@@ -221,6 +225,12 @@ The importer:
 
 At present there is no CLI command to approve an imported record after the fact. Add verified evidence with `evidence add --approved` when you want to use it in an application or résumé proposal.
 
+When application tracking is enabled, job intake preserves existing seasonal tracker conventions
+and creates a missing `<Cycle> Application Tracker.md` plus `<Cycle> Application Notes/` as needed.
+If the posting and package contain no specific season, it files the job under an explicit
+`Unscheduled` tracker instead of guessing from the current date. Multi-cycle postings update every
+named cycle while keeping one detailed note.
+
 ### Gmail
 
 Set the provider in `config.toml`:
@@ -289,11 +299,29 @@ The MCP tools fall into two groups:
 | `list_applications` | Read local application records |
 | `list_evidence` | Read local evidence records |
 | `list_mail_events` | Read normalized local mail events |
+| `intake_job_url` | Run end-to-end research, deterministic résumé tailoring/build, application-record, and tracker intake |
 | `prepare_job_workspace` | Fetch a supplied job URL and create a local job package |
 | `create_tailored_resume` | Create a local proposal, diff, and claim report |
 | `validate_tailored_resume` | Run the configured local LaTeX compiler |
 
-`prepare_job_workspace` performs transparent keyword-overlap matching against approved evidence. It is not semantic AI matching. The MCP client supplies any tailored LaTeX content, which is still gated by approved evidence IDs and configured editable sections.
+`intake_job_url` and `prepare_job_workspace` use deterministic lexical relevance ranking. Within
+configured sections, they reorder existing Experience bullets, project blocks/bullets, and every
+Technical Skills category. They never generate claim text. Section names are matched without
+depending on case, spaces, or hyphens. If no meaningful, constraint-valid ordering change exists,
+the proposal is an explicit baseline copy.
+
+Ranking uses the visible official posting body plus bounded structured job metadata. Executable
+scripts, styles, navigation, and page chrome are removed before storage and scoring. Skill and
+phrase matches require token boundaries, so substrings such as `java` in `javascript`, `rust` in
+`trust`, or `aws` in `laws` do not receive relevance credit.
+
+The claim report records the source, original/output position, matched terms, and approved evidence
+IDs (when exact evidence exists) for every bullet. Configured bullet limits reject newly introduced
+violations while reporting unchanged legacy outliers. Successful builds enforce `max_pages` with a
+pure-Python PDF parser and expose the exact configured PDF path for messaging attachments. A
+completed legacy package is upgraded once when its job URL is pasted again. An incomplete legacy
+package is rebuilt at the same stable path while its original files are preserved in that package's
+`legacy-backup/` directory.
 
 ## How data moves through the project
 
@@ -322,7 +350,7 @@ Mail classification currently uses deterministic phrase matching. It recognizes 
 - OAuth credentials are not stored in TOML, `.env` files, SQLite, or Git.
 - Email previews may be used during local classification but are not persisted.
 - Obsidian imports are bounded to the configured vault and are read-only.
-- Résumé proposals require existing approved evidence.
+- New résumé claims require approved evidence; automatic ordering uses only claims already present in the user-provided template.
 - Proposed LaTeX rejects file-inclusion and shell-execution commands such as `\input` and `\write18`.
 - The MCP server uses stdio rather than opening a network service. It still runs with the permissions of the client that launches it, so review its command, environment, and configured paths.
 - Job descriptions, email text, Markdown, and web pages are treated as untrusted input—not instructions.
@@ -341,7 +369,7 @@ Current limitations include:
 - imported Obsidian candidates cannot yet be approved through the CLI;
 - job matching is lexical keyword overlap, not semantic ranking;
 - résumé editing supports LaTeX only;
-- résumé bullet length and page-limit settings are stored but not currently enforced;
+- automatic tailoring is deterministic lexical ranking rather than semantic or generative editing;
 - no Overleaf synchronization; and
 - no automatic applications or outbound messages by design.
 

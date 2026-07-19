@@ -80,6 +80,41 @@ class JobIntakeTests(unittest.TestCase):
         resolver.assert_called_once_with("jobs.example.test", 80, type=socket.SOCK_STREAM)
         network_socket.connect.assert_called_once_with(("93.184.216.34", 80))
 
+    def test_fetch_snapshot_excludes_page_scripts_but_preserves_job_metadata(self) -> None:
+        body = b"""
+        <html><head>
+        <script>const React = 'JavaScript'; const legal = 'laws trust expressed';</script>
+        <script type="application/ld+json">
+        {"@type":"JobPosting","title":"Systems Intern",
+         "description":"Build C++ services.",
+         "hiringOrganization":{"name":"Example"}}
+        </script></head>
+        <body><main><h1>Systems Intern</h1><p>Build C++ services.</p></main></body></html>
+        """
+        network_socket = self._socket_with_response(
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: text/html; charset=utf-8\r\n"
+            + f"Content-Length: {len(body)}\r\n".encode()
+            + b"Connection: close\r\n\r\n"
+            + body
+        )
+        with (
+            patch(
+                "recruiting_pipeline.job_intake.socket.getaddrinfo",
+                return_value=self._public_resolution("93.184.216.34", 80),
+            ),
+            patch(
+                "recruiting_pipeline.job_intake.socket.socket",
+                return_value=network_socket,
+            ),
+        ):
+            snapshot = fetch_job_snapshot("http://jobs.example.test/role")
+
+        self.assertIn("Systems Intern Build C++ services.", snapshot)
+        self.assertIn('"@type": "JobPosting"', snapshot)
+        for contamination in ("React", "JavaScript", "laws", "trust", "expressed"):
+            self.assertNotIn(contamination, snapshot)
+
     def test_fetch_falls_back_to_each_validated_endpoint(self) -> None:
         unreachable_socket = MagicMock()
         unreachable_socket.connect.side_effect = OSError("IPv6 route unavailable")

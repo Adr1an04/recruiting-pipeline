@@ -23,7 +23,14 @@ uv run recruiting-pipeline resume settings set \
   --config ~/.config/recruiting-pipeline/config.toml \
   --template-path /absolute/path/to/resume.tex \
   --output-root /absolute/path/to/recruiting-applications \
-  --output-pdf-name Candidate_Resume.pdf
+  --output-pdf-name Candidate_Resume.pdf \
+  --editable-section Experience \
+  --editable-section Projects \
+  --editable-section Technical-Skills \
+  --bullet-min-chars 99 \
+  --bullet-target-chars 105 \
+  --bullet-max-chars 116 \
+  --max-pages 1
 ```
 
 When intake cannot infer a recruiting season from its URL-only input, it files the package under
@@ -127,7 +134,8 @@ Hermes exposes tools prefixed with `mcp__recruiting_pipeline__`:
 
 **Explicit local artifact actions**
 
-- `intake_job_url` — the primary first-turn action for a bare job URL, Markdown/chat link, or URL followed by preview text. It accepts the URL alone, atomically publishes the complete local review package, and reuses repeats of the same listing (including tracking-only URL variants).
+- `intake_job_url` — the primary first-turn action for a bare job URL, Markdown/chat link, or URL followed by preview text. It accepts the URL alone, atomically publishes the complete local review package, writes detailed source-cited posting research and an idempotent local application record, deterministically reorders existing résumé bullets/projects/all skill categories, compiles the exact configured PDF, creates/synchronizes the appropriate Obsidian cycle tracker, and reuses current repeats of the same listing (including tracking-only URL variants). Legacy packages are upgraded once using a freshly sanitized snapshot; incomplete legacy files are retained under `legacy-backup/` after a clean rebuild. Jobs with no discoverable time bucket go to `Unscheduled Application Tracker.md` and `Unscheduled Application Notes/`.
+- `record_secondary_research` — records bounded host-provided web/community search results after intake, clearly separated from official-posting facts and labeled unverified.
 - `prepare_job_workspace` — an advanced second-stage variant for callers that already have company, role, cycle, and slug metadata and explicitly need tracker integration. It is not the entry point for pasted links.
 - `create_tailored_resume` — writes only a reviewable tailored `.tex`, diff, and claim report inside that package, gated by supplied approved evidence IDs and configured editable sections.
 - `validate_tailored_resume` — explicitly compiles the selected proposal locally; it never publishes or submits it.
@@ -156,6 +164,21 @@ requests such as “summarize only” or “don't intake,” while correctly tre
 summarize—run the pipeline” as an intake request. It ignores imported page content, reports the tool
 result back into the turn, and does not submit applications or send messages. `/intake-job <url>`
 is available as an explicit fallback.
+
+On messaging platforms, a successful validated PDF is emitted through Hermes' document-upload
+directive so Discord/Telegram/etc. receive an actual attachment rather than a server-local path.
+The PDF is the compiled tailored proposal, not a stale baseline build. Automatic tailoring changes
+ordering only: every claim remains byte-for-byte sourced from the user-provided template, with
+per-claim provenance in `claim-report.json`. Configured bullet limits prevent new violations and a
+configured `max_pages` is enforced with the same pure-Python PDF parser on macOS, Linux, and
+Windows.
+Before ranking, the fetcher keeps visible official job text and bounded structured job metadata but
+removes scripts, styles, navigation, and footer content. Relevance matching is boundary-aware and
+does not treat substrings inside unrelated words as skill matches.
+The router also calls the host's generic `web_search` tool for a Reddit/community query and a broad
+company/role query, then records those results separately as unverified secondary research. This
+uses the host's configured search backend and is OS-agnostic; unavailable search never blocks the
+official-posting intake or résumé delivery.
 
 MCP discovery can still be finishing when the gateway receives its first message. For that startup
 window, the router retries only Hermes' exact `Unknown tool` and `MCP server ... is not connected`

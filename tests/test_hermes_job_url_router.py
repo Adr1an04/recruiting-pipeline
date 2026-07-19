@@ -6,6 +6,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import ModuleType
 from typing import Any
 from unittest.mock import patch
@@ -189,6 +190,204 @@ class HermesJobUrlRouterTests(unittest.TestCase):
         self.assertIn('"package_dir":"/tmp/example"', injected["context"])
         self.assertIn('"package_dir":"/tmp/example"', repeated["context"])
         self.assertIn("Do not call a browser", injected["context"])
+        self.assertIn("whether deterministic tailoring made", injected["context"])
+
+    def test_message_reply_attaches_a_successfully_validated_resume_pdf(self) -> None:
+        with TemporaryDirectory() as directory:
+            package_dir = Path(directory) / "application"
+            artifacts_dir = package_dir / "artifacts"
+            artifacts_dir.mkdir(parents=True)
+            pdf_path = artifacts_dir / "Candidate_Resume.pdf"
+            pdf_path.write_bytes(b"%PDF-1.7\nsynthetic\n")
+            context = _FakePluginContext(
+                result=json.dumps(
+                    {
+                        "package_dir": str(package_dir),
+                        "validation": {
+                            "returncode": 0,
+                            "pdf": str(pdf_path),
+                            "skipped": None,
+                        },
+                    }
+                )
+            )
+            self.router.register(context)
+            url = "https://jobs.ashbyhq.com/example/00000000-0000-0000-0000-000000000000"
+
+            injected = context.hooks["pre_llm_call"](
+                user_message=url,
+                session_id="discord-session",
+                turn_id="attachment-turn",
+                platform="discord",
+            )
+            transformed = context.hooks["transform_llm_output"](
+                response_text="Intake complete. Your resume is attached.",
+                session_id="discord-session",
+                model="test-model",
+                platform="discord",
+            )
+            repeated = context.hooks["transform_llm_output"](
+                response_text="Unrelated later response.",
+                session_id="discord-session",
+                model="test-model",
+                platform="discord",
+            )
+
+            assert injected is not None
+            assert transformed is not None
+            self.assertIn("router will add the native message attachment", injected["context"])
+            self.assertIn('MEDIA:"', transformed)
+            self.assertIn(str(pdf_path), transformed)
+            self.assertIn("[[as_document]]", transformed)
+            self.assertIsNone(repeated)
+
+    def test_attachment_unwraps_the_live_hermes_mcp_result_envelope(self) -> None:
+        with TemporaryDirectory() as directory:
+            package_dir = Path(directory) / "application"
+            artifacts_dir = package_dir / "artifacts"
+            artifacts_dir.mkdir(parents=True)
+            pdf_path = artifacts_dir / "Candidate_Resume.pdf"
+            pdf_path.write_bytes(b"%PDF-1.7\nsynthetic\n")
+            payload = {
+                "package_dir": str(package_dir),
+                "validation": {"returncode": 0, "pdf": str(pdf_path)},
+            }
+            context = _FakePluginContext(
+                result=json.dumps(
+                    {
+                        "result": json.dumps(payload),
+                        "structuredContent": payload,
+                    }
+                )
+            )
+            self.router.register(context)
+
+            context.hooks["pre_llm_call"](
+                user_message="https://boards.greenhouse.io/example/jobs/12345",
+                session_id="enveloped-session",
+                turn_id="enveloped-turn",
+                platform="discord",
+            )
+            transformed = context.hooks["transform_llm_output"](
+                response_text="Intake complete.",
+                session_id="enveloped-session",
+                platform="discord",
+            )
+
+            assert transformed is not None
+            self.assertIn("[[as_document]]", transformed)
+            self.assertIn(f'MEDIA:"{pdf_path.resolve()}"', transformed)
+
+    def test_router_runs_and_records_bounded_host_web_research(self) -> None:
+        with TemporaryDirectory() as directory:
+            package_dir = Path(directory) / "application"
+            research_dir = package_dir / "research"
+            research_dir.mkdir(parents=True)
+            research_note = research_dir / "role-research.md"
+            research_note.write_text("# Example Co — Software Intern research\n")
+            intake_result = json.dumps(
+                {
+                    "package_dir": str(package_dir),
+                    "research_note": str(research_note),
+                    "validation": {"returncode": 1, "pdf": None},
+                }
+            )
+            context = _FakePluginContext(
+                results=[
+                    intake_result,
+                    '{"results":[{"title":"Community thread","url":"https://reddit.com/r/example"}]}',
+                    '{"results":[{"title":"Company engineering","url":"https://example.test/engineering"}]}',
+                    '{"secondary_research_note":"/tmp/secondary-research.md","searches_recorded":2}',
+                ]
+            )
+            self.router.register(context)
+            url = "https://boards.greenhouse.io/example/jobs/12345"
+
+            injected = context.hooks["pre_llm_call"](
+                user_message=url,
+                session_id="research-session",
+                turn_id="research-turn",
+                platform="discord",
+            )
+
+            assert injected is not None
+            self.assertEqual(context.calls[0][0], "mcp__recruiting_pipeline__intake_job_url")
+            self.assertEqual([name for name, _ in context.calls[1:3]], ["web_search", "web_search"])
+            self.assertIn("site:reddit.com", context.calls[1][1]["query"])
+            self.assertEqual(
+                context.calls[3][0],
+                "mcp__recruiting_pipeline__record_secondary_research",
+            )
+            self.assertIn("secondary_research_note", injected["context"])
+
+    def test_attachment_requires_successful_in_package_pdf_validation(self) -> None:
+        with TemporaryDirectory() as directory:
+            package_dir = Path(directory) / "application"
+            artifacts_dir = package_dir / "artifacts"
+            artifacts_dir.mkdir(parents=True)
+            outside_pdf = Path(directory) / "outside.pdf"
+            outside_pdf.write_bytes(b"%PDF-1.7\nsynthetic\n")
+            scenarios = [
+                {"returncode": 1, "pdf": str(outside_pdf)},
+                {"returncode": 0, "pdf": str(outside_pdf)},
+                {"returncode": 0, "pdf": str(artifacts_dir / "missing.pdf")},
+            ]
+
+            for index, validation in enumerate(scenarios):
+                with self.subTest(validation=validation):
+                    context = _FakePluginContext(
+                        result=json.dumps(
+                            {"package_dir": str(package_dir), "validation": validation}
+                        )
+                    )
+                    self.router.register(context)
+                    context.hooks["pre_llm_call"](
+                        user_message=(
+                            f"https://jobs.ashbyhq.com/example/00000000-0000-0000-0000-{index:012d}"
+                        ),
+                        session_id=f"invalid-session-{index}",
+                        turn_id=f"invalid-turn-{index}",
+                        platform="discord",
+                    )
+
+                    transformed = context.hooks["transform_llm_output"](
+                        response_text="Intake result.",
+                        session_id=f"invalid-session-{index}",
+                        platform="discord",
+                    )
+
+                    self.assertIsNone(transformed)
+
+    def test_local_cli_does_not_emit_a_media_directive(self) -> None:
+        with TemporaryDirectory() as directory:
+            package_dir = Path(directory) / "application"
+            artifacts_dir = package_dir / "artifacts"
+            artifacts_dir.mkdir(parents=True)
+            pdf_path = artifacts_dir / "Candidate_Resume.pdf"
+            pdf_path.write_bytes(b"%PDF-1.7\nsynthetic\n")
+            context = _FakePluginContext(
+                result=json.dumps(
+                    {
+                        "package_dir": str(package_dir),
+                        "validation": {"returncode": 0, "pdf": str(pdf_path)},
+                    }
+                )
+            )
+            self.router.register(context)
+            context.hooks["pre_llm_call"](
+                user_message="https://boards.greenhouse.io/example/jobs/12345",
+                session_id="cli-session",
+                turn_id="cli-turn",
+                platform="cli",
+            )
+
+            transformed = context.hooks["transform_llm_output"](
+                response_text="Intake complete.",
+                session_id="cli-session",
+                platform="cli",
+            )
+
+            self.assertIsNone(transformed)
 
     def test_retries_only_transient_mcp_startup_errors(self) -> None:
         url = "https://jobs.ashbyhq.com/example/00000000-0000-0000-0000-000000000000"

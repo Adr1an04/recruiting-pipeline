@@ -24,3 +24,15 @@ intake failures are returned immediately and are never retried.
 
 “Summarize only” and “don't run the pipeline” opt out. A request such as “don't just
 summarize—run the pipeline” still runs intake, as requested.
+
+When intake returns a successfully validated PDF, gateway-delivered replies (Discord, Signal,
+Telegram, and similar message platforms) include it as a native document attachment. The plugin
+unwraps Hermes' MCP result envelope, validates that the file is a real PDF inside the returned
+package's `artifacts` directory, and adds Hermes' outbound document-upload directive. A server-local
+path is never presented as a substitute for the upload. Local CLI responses remain text-only.
+
+After official-posting intake, the router also uses the host's generic `web_search` tool for one
+Reddit/community query and one broader company/role query, then records the bounded results through
+`record_secondary_research`. The output is stored separately from official facts and labeled as
+unverified. Set `RECRUITING_PIPELINE_WEB_SEARCH_TOOL` only if the host uses a different generic tool
+name; if search is unavailable, primary intake and the PDF attachment still proceed.
