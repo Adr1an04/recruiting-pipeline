@@ -97,14 +97,15 @@ class ResumeSettingsCliTests(unittest.TestCase):
                     "--cycle",
                     "Fall26",
                     "--application-slug",
-                    "Fall26Palantir",
+                    "Fall26ExampleSystems",
                     "--job-url",
-                    "https://jobs.example.test/palantir",
+                    "https://jobs.example.test/example-systems",
                 ]
             )
 
             self.assertEqual(
-                package["package_dir"], str(root / "output" / "Fall26" / "Fall26Palantir")
+                package["package_dir"],
+                str(root / "output" / "Fall26" / "Fall26ExampleSystems"),
             )
             self.assertTrue(Path(str(package["manifest_path"])).exists())
 

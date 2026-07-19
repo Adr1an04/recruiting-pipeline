@@ -21,6 +21,7 @@ output/
 *.sqlite3
 
 # Tooling and operating-system files
+.hermes/
 .venv/
 build/
 dist/

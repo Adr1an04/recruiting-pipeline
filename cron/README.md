@@ -35,6 +35,12 @@ hermes --profile <profile> cron create '0 9 * * 1-5' \
 
 ## Read-only Zoho collection stage
 
-The CLI includes a read-only Zoho adapter. A deterministic no-agent poll may run `recruiting-pipeline zoho sync` against a configured Inbox using the minimum OAuth scopes, normalize newly observed metadata locally, and exit. Configure the client identifier and Keychain-backed OAuth connection locally; never commit credentials, personal paths, or a filled-in cron command.
+The CLI includes a read-only Zoho adapter. A deterministic no-agent poll may run
+`recruiting-pipeline zoho sync` against a configured Inbox using the minimum OAuth scopes,
+normalize newly observed metadata locally, and exit. Configure the client identifier and
+operating-system credential store locally; never commit credentials, personal paths, or a
+filled-in cron command.
 
-Treat cron output as a prompt for review. Never schedule automatic applications, external résumé syncs, emails, or social-media actions.
+Treat cron output as a prompt for review. Zoho credentials stay in the operating system credential
+store selected by Python `keyring`. Never schedule automatic applications, external résumé syncs,
+emails, or social-media actions.

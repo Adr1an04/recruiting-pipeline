@@ -16,16 +16,16 @@ class ResumePackageTests(unittest.TestCase):
             package = create_job_package(
                 output_root=root,
                 cycle="Fall26",
-                application_slug="Fall26Palantir",
-                job_url="https://jobs.example.test/palantir",
+                application_slug="Fall26ExampleSystems",
+                job_url="https://jobs.example.test/example-systems",
             )
 
-            self.assertEqual(package.package_dir, root / "Fall26" / "Fall26Palantir")
+            self.assertEqual(package.package_dir, root / "Fall26" / "Fall26ExampleSystems")
             self.assertTrue((package.package_dir / "source").is_dir())
             self.assertTrue((package.package_dir / "artifacts").is_dir())
             self.assertTrue((package.package_dir / "research").is_dir())
             manifest = json.loads(package.manifest_path.read_text(encoding="utf-8"))
-            self.assertEqual(manifest["job_url"], "https://jobs.example.test/palantir")
+            self.assertEqual(manifest["job_url"], "https://jobs.example.test/example-systems")
             self.assertEqual(manifest["template_status"], "not_copied")
 
     def test_normalizes_equivalent_term_cycles_to_one_directory_name(self) -> None:
@@ -54,10 +54,10 @@ class ResumePackageTests(unittest.TestCase):
                 create_job_package(
                     output_root=root,
                     cycle="Fall26",
-                    application_slug="Fall26Palantir",
-                    job_url="https://jobs.example.test/palantir",
+                    application_slug="Fall26ExampleSystems",
+                    job_url="https://jobs.example.test/example-systems",
                 )
-            self.assertFalse((outside / "Fall26Palantir").exists())
+            self.assertFalse((outside / "Fall26ExampleSystems").exists())
 
     def test_refuses_unsafe_or_duplicate_package_paths(self) -> None:
         with TemporaryDirectory() as directory:
@@ -66,21 +66,21 @@ class ResumePackageTests(unittest.TestCase):
                 create_job_package(
                     output_root=root,
                     cycle="../Fall26",
-                    application_slug="Fall26Palantir",
-                    job_url="https://jobs.example.test/palantir",
+                    application_slug="Fall26ExampleSystems",
+                    job_url="https://jobs.example.test/example-systems",
                 )
             create_job_package(
                 output_root=root,
                 cycle="Fall26",
-                application_slug="Fall26Palantir",
-                job_url="https://jobs.example.test/palantir",
+                application_slug="Fall26ExampleSystems",
+                job_url="https://jobs.example.test/example-systems",
             )
             with self.assertRaisesRegex(FileExistsError, "already exists"):
                 create_job_package(
                     output_root=root,
                     cycle="Fall26",
-                    application_slug="Fall26Palantir",
-                    job_url="https://jobs.example.test/palantir",
+                    application_slug="Fall26ExampleSystems",
+                    job_url="https://jobs.example.test/example-systems",
                 )
 
 

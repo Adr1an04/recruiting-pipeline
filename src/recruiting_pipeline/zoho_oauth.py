@@ -4,18 +4,22 @@ import base64
 import hashlib
 import json
 import secrets
-import subprocess
 import webbrowser
 from collections.abc import Callable, Mapping, Sequence
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
+import keyring
+from keyring.errors import KeyringError
+
 READ_ONLY_SCOPES = (
     "ZohoMail.messages.READ",
     "ZohoMail.folders.READ",
     "ZohoMail.accounts.READ",
 )
+_CLIENT_SECRET_SERVICE = "recruiting-pipeline.zoho.client-secret"
+_TOKEN_SERVICE = "recruiting-pipeline.zoho.tokens"
 
 
 def pkce_challenge(code_verifier: str) -> str:
@@ -91,23 +95,31 @@ def exchange_authorization_code(
     return response
 
 
-def _store_tokens_in_keychain(service: str, account: str, value: dict[str, object]) -> None:
-    subprocess.run(
-        [
-            "security",
-            "add-generic-password",
-            "-U",
-            "-s",
-            service,
-            "-a",
-            account,
-            "-w",
-            json.dumps(value, separators=(",", ":")),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+def _set_credential(service: str, account: str, value: str) -> None:
+    try:
+        keyring.set_password(service, account, value)
+    except KeyringError as error:
+        raise RuntimeError(
+            "the operating system credential store is unavailable; "
+            "configure a supported keyring backend and try again"
+        ) from error
+
+
+def _get_credential(service: str, account: str) -> str:
+    try:
+        value = keyring.get_password(service, account)
+    except KeyringError as error:
+        raise RuntimeError(
+            "the operating system credential store is unavailable; "
+            "configure a supported keyring backend and try again"
+        ) from error
+    if value is None:
+        raise ValueError(f"no credential is stored for service {service!r} and account {account!r}")
+    return value
+
+
+def _store_tokens(service: str, account: str, value: dict[str, object]) -> None:
+    _set_credential(service, account, json.dumps(value, separators=(",", ":")))
 
 
 def _start_loopback_receiver() -> Callable[[str], str]:
@@ -142,20 +154,10 @@ def _start_loopback_receiver() -> Callable[[str], str]:
     return receive
 
 
-def _read_keychain_value(service: str, client_id: str) -> str:
-    result = subprocess.run(
-        ["security", "find-generic-password", "-s", service, "-a", client_id, "-w"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.rstrip("\n")
-
-
-def read_tokens_from_keychain(client_id: str) -> dict[str, object]:
-    value = json.loads(_read_keychain_value("recruiting-pipeline.zoho.tokens", client_id))
+def read_tokens(client_id: str) -> dict[str, object]:
+    value = json.loads(_get_credential(_TOKEN_SERVICE, client_id))
     if not isinstance(value, dict) or not isinstance(value.get("refresh_token"), str):
-        raise ValueError("Zoho Keychain token entry has no refresh token")
+        raise ValueError("Zoho credential-store token entry has no refresh token")
     return value
 
 
@@ -163,9 +165,9 @@ def refresh_access_token(*, client_id: str, accounts_url: str = "https://account
     response = _post_form(
         f"{accounts_url.rstrip('/')}/oauth/v2/token",
         {
-            "refresh_token": str(read_tokens_from_keychain(client_id)["refresh_token"]),
+            "refresh_token": str(read_tokens(client_id)["refresh_token"]),
             "client_id": client_id,
-            "client_secret": _read_client_secret_from_keychain(client_id),
+            "client_secret": read_client_secret(client_id),
             "grant_type": "refresh_token",
         },
     )
@@ -175,43 +177,14 @@ def refresh_access_token(*, client_id: str, accounts_url: str = "https://account
     return token
 
 
-def _read_client_secret_from_keychain(client_id: str) -> str:
-    result = subprocess.run(
-        [
-            "security",
-            "find-generic-password",
-            "-s",
-            "recruiting-pipeline.zoho.client-secret",
-            "-a",
-            client_id,
-            "-w",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.rstrip("\n")
+def read_client_secret(client_id: str) -> str:
+    return _get_credential(_CLIENT_SECRET_SERVICE, client_id)
 
 
 def store_client_secret(client_id: str, client_secret: str) -> None:
     if not client_secret:
         raise ValueError("client secret must not be empty")
-    subprocess.run(
-        [
-            "security",
-            "add-generic-password",
-            "-U",
-            "-s",
-            "recruiting-pipeline.zoho.client-secret",
-            "-a",
-            client_id,
-            "-w",
-            client_secret,
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    _set_credential(_CLIENT_SECRET_SERVICE, client_id, client_secret)
 
 
 def connect(
@@ -223,7 +196,7 @@ def connect(
     browser_open: Callable[[str], bool] = webbrowser.open,
     receive_authorization_code: Callable[[str], str] | None = None,
     post: Callable[[str, dict[str, str]], dict[str, object]] = _post_form,
-    token_store: Callable[[str, str, dict[str, object]], None] = _store_tokens_in_keychain,
+    token_store: Callable[[str, str, dict[str, object]], None] = _store_tokens,
 ) -> dict[str, object]:
     state = secrets.token_urlsafe(32)
     verifier = secrets.token_urlsafe(64)
@@ -247,7 +220,7 @@ def connect(
         code_verifier=verifier,
         post=post,
     )
-    token_store("recruiting-pipeline.zoho.tokens", client_id, tokens)
+    token_store(_TOKEN_SERVICE, client_id, tokens)
     return tokens
 
 

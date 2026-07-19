@@ -77,7 +77,7 @@ Optional features have additional requirements:
 
 - `latexmk` to compile a proposed LaTeX résumé
 - an existing LaTeX résumé (`.tex`) for résumé workflows
-- macOS Keychain for the built-in Zoho OAuth flow
+- a supported operating-system credential store for the built-in Zoho OAuth flow
 - an authenticated [`gws`](https://github.com/googleworkspace/cli) command for Gmail
 
 On macOS, the standard MacTeX location at `/Library/TeX/texbin` is detected automatically,
@@ -271,7 +271,10 @@ uv run recruiting-pipeline zoho connect --client-id '<client-id>'
 uv run recruiting-pipeline zoho sync --client-id '<client-id>' --limit 20
 ```
 
-The client secret and OAuth tokens are stored in macOS Keychain. The sync reads recent Inbox metadata and cannot mutate messages.
+The client secret and OAuth tokens are stored through the system credential store using Python's
+`keyring` abstraction. This uses macOS Keychain, Windows Credential Locker, or a supported Linux
+Secret Service backend; credentials are never written to the project configuration. The sync reads
+recent Inbox metadata and cannot mutate messages.
 
 To try classification without OAuth or network access:
 

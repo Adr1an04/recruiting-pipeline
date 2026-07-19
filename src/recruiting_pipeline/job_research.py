@@ -426,13 +426,17 @@ def _section_items(
     active = False
     items: list[str] = []
     for line in lines:
+        is_item = line.startswith("- ")
         label = line.lstrip("- ").strip().casefold()
         if not active and any(label == start.casefold() for start in starts):
             active = True
             continue
-        if active and any(label == end.casefold() for end in ends):
+        if active and (
+            any(label == end.casefold() for end in ends)
+            or (not is_item and label.startswith("about "))
+        ):
             break
-        if active and line.startswith("- "):
+        if active and is_item:
             item = line[2:].strip()
             if item and item not in items:
                 items.append(item)
@@ -555,7 +559,7 @@ def analyze_job_snapshot(snapshot: str, *, job_url: str) -> JobResearch:
     responsibilities = _section_items(
         content_lines,
         starts=("Core Responsibilities", "Responsibilities", "What You Will Do"),
-        ends=("About Eulerity", "About Us", "Requirements", "Qualifications"),
+        ends=("About Us", "Requirements", "Qualifications"),
     )
     qualifications = _section_items(
         content_lines,

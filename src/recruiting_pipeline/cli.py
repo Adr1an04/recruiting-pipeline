@@ -23,8 +23,8 @@ from .resume_settings import as_json as resume_settings_as_json
 from .resume_settings import update_settings
 from .store import PipelineStore
 from .zoho_oauth import (
-    _read_client_secret_from_keychain,
     connect,
+    read_client_secret,
     refresh_access_token,
     store_client_secret,
 )
@@ -87,7 +87,7 @@ def _parser() -> argparse.ArgumentParser:
     _config_argument(zoho_fixture)
     zoho_fixture.add_argument("--fixture", type=Path, required=True)
     zoho_secret = zoho_commands.add_parser(
-        "set-client-secret", help="store a Zoho OAuth client secret in macOS Keychain"
+        "set-client-secret", help="store a Zoho OAuth client secret in the OS credential store"
     )
     zoho_secret.add_argument("--client-id", required=True)
     zoho_connect = zoho_commands.add_parser(
@@ -196,15 +196,17 @@ def main(arguments: Sequence[str] | None = None) -> int:
     if args.command == "init":
         return _initialize(args.config)
     if args.command == "zoho" and args.zoho_command == "set-client-secret":
-        secret = getpass.getpass("Zoho OAuth client secret (stored only in macOS Keychain): ")
+        secret = getpass.getpass(
+            "Zoho OAuth client secret (stored only in the OS credential store): "
+        )
         store_client_secret(args.client_id, secret)
-        _print_json({"client_id": args.client_id, "stored": "macOS Keychain"})
+        _print_json({"client_id": args.client_id, "stored": "OS credential store"})
         return 0
     if args.command == "zoho" and args.zoho_command == "connect":
         tokens = connect(
             accounts_url=args.accounts_url,
             client_id=args.client_id,
-            client_secret=_read_client_secret_from_keychain(args.client_id),
+            client_secret=read_client_secret(args.client_id),
         )
         _print_json(
             {

@@ -86,7 +86,10 @@ uv run recruiting-pipeline zoho ingest-fixture \
 
 ## 4. Connect Zoho Mail (read-only)
 
-The live connector uses Zoho's **Mobile-based application** OAuth type, Authorization Code + PKCE, a fixed local redirect URI, and macOS Keychain. It requests only the read-only `ZohoMail.messages.READ`, `ZohoMail.folders.READ`, and `ZohoMail.accounts.READ` scopes; messages are not writable.
+The live connector uses Zoho's **Mobile-based application** OAuth type, Authorization Code + PKCE,
+a fixed local redirect URI, and the operating system's credential store through Python `keyring`.
+It requests only the read-only `ZohoMail.messages.READ`, `ZohoMail.folders.READ`, and
+`ZohoMail.accounts.READ` scopes; messages are not writable.
 
 1. In Zoho API Console, create a Mobile-based application and register exactly `http://127.0.0.1:8765/callback` as its redirect URI.
 2. Copy the client ID (not a secret). Store the client secret locally without displaying it using:
@@ -95,14 +98,18 @@ The live connector uses Zoho's **Mobile-based application** OAuth type, Authoriz
    uv run recruiting-pipeline zoho set-client-secret --client-id '<client-id>'
    ```
 
-   The command prompts without echo and writes the secret only to macOS Keychain.
+   The command prompts without echo and writes the secret only to the operating system credential
+   store. Supported backends include macOS Keychain, Windows Credential Locker, and Linux Secret
+   Service. A headless Linux host must provide and unlock a compatible keyring backend.
 3. Start the consent flow:
 
    ```bash
    uv run recruiting-pipeline zoho connect --client-id '<client-id>'
    ```
 
-   Your browser opens Zoho's official consent page. On approval, the local loopback endpoint receives the code and the token response is stored in macOS Keychain. No token or secret is written to configuration, Git, chat, `.env`, or Obsidian.
+   Your browser opens Zoho's official consent page. On approval, the local loopback endpoint
+   receives the code and the token response is stored in the same credential store. No token or
+   secret is written to configuration, Git, chat, `.env`, or Obsidian.
 
 ## 5. Connect Hermes through MCP
 
@@ -140,7 +147,8 @@ Hermes exposes tools prefixed with `mcp__recruiting_pipeline__`:
 - `create_tailored_resume` — writes only a reviewable tailored `.tex`, diff, and claim report inside that package, gated by supplied approved evidence IDs and configured editable sections.
 - `validate_tailored_resume` — explicitly compiles the selected proposal locally; it never publishes or submits it.
 
-The MCP server has no outbound application or message tool. Zoho credentials remain in macOS Keychain and are never sent to Hermes.
+The MCP server has no outbound application or message tool. Zoho credentials remain in the
+operating system credential store and are never sent to Hermes.
 
 ### Deterministic pasted-link routing for Hermes
 

@@ -18,7 +18,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Topic :: Office/Business",
 ]
-dependencies = ["pypdf>=5,<7"]
+dependencies = ["keyring>=25,<26", "pypdf>=5,<7"]
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.28,<2"]

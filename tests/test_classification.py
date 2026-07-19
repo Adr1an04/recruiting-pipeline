@@ -28,7 +28,7 @@ class ClassificationTests(unittest.TestCase):
     def test_assessment_invitation_requires_immediate_review(self) -> None:
         result = classify_application_message(
             subject="Your HackerRank Software Engineer Intern Coding Test Invitation",
-            preview="Snowflake invites you to complete an online assessment.",
+            preview="Example Systems invites you to complete an online assessment.",
         )
 
         self.assertEqual(result.kind, "assessment")

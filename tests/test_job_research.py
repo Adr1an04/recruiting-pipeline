@@ -51,18 +51,22 @@ class JobResearchTests(unittest.TestCase):
                             "title": (
                                 "Website Developer & Content Marketing Intern - AI & Automation"
                             ),
-                            "company_name": "Eulerity",
-                            "job_post_location": "New York, NY",
+                            "company_name": "Example Labs",
+                            "job_post_location": "Sample City, NY",
                             "published_at": "2026-07-03T09:57:27-04:00",
                             "employment": "hidden",
                             "content": (
                                 "<p><strong>Core Responsibilities</strong></p>"
                                 "<ul><li>Build pages using HTML, CSS, and JavaScript.</li>"
-                                "<li>Build publishing automations with n8n or Zapier.</li></ul>"
+                                "<li>Build publishing automations with n8n or Zapier.</li>"
+                                "<li>About 20 percent of the work supports analytics.</li></ul>"
                                 "<p><strong>Requirements</strong></p>"
                                 "<ul><li>Show a portfolio of shipped work.</li></ul>"
                                 "<p><strong>Details</strong></p>"
-                                "<ul><li>Hybrid, 2 days per week in our New York office.</li></ul>"
+                                "<ul><li>Hybrid, 2 days per week in our "
+                                "Sample City office.</li></ul>"
+                                "<p><strong>About Example Labs</strong></p>"
+                                "<p>Example Labs builds synthetic test products.</p>"
                                 "<h2><strong>Logistics</strong></h2>"
                                 "<ul><li>Summer 2026.</li>"
                                 "<li>Hybrid, 4 days per week in person.</li>"
@@ -79,19 +83,19 @@ class JobResearchTests(unittest.TestCase):
 
         research = analyze_job_snapshot(
             snapshot,
-            job_url="https://job-boards.greenhouse.io/eulerity/jobs/4694300006",
+            job_url="https://job-boards.greenhouse.io/example-labs/jobs/1234567890",
         )
 
-        self.assertEqual(research.company, "Eulerity")
+        self.assertEqual(research.company, "Example Labs")
         self.assertEqual(
             research.role,
             "Website Developer & Content Marketing Intern - AI & Automation",
         )
         self.assertEqual(research.cycles, ("Summer 2026",))
-        self.assertEqual(research.location, "Hybrid — New York, NY")
+        self.assertEqual(research.location, "Hybrid — Sample City, NY")
         self.assertEqual(research.compensation, "$18–$20/hour")
         self.assertIn("HTML", research.skills)
-        self.assertEqual(len(research.responsibilities), 2)
+        self.assertEqual(len(research.responsibilities), 3)
         self.assertEqual(len(research.qualifications), 1)
         self.assertIn("conflicting in-office expectations", research.ambiguities[0])
         self.assertIn("https://forms.gle/exampleForm", research.application_constraints[0])
