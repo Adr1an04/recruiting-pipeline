@@ -181,7 +181,7 @@ def create_keyword_prioritized_resume_proposal(
     terms = job_description.casefold()
     prioritized = [
         name
-        for _, name in sorted(enumerate(names), key=lambda item: not (item[1].casefold() in terms))
+        for _, name in sorted(enumerate(names), key=lambda item: item[1].casefold() not in terms)
     ]
     replacement = (
         prefix + "Languages:} " + ", ".join(prioritized) + (" " + suffix if suffix else "")
