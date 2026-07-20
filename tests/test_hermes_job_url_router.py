@@ -635,6 +635,35 @@ class HermesJobUrlRouterTests(unittest.TestCase):
                 [("mcp__erga_mcp__export_data", {})],
             )
 
+    def test_tracker_command_returns_the_cross_platform_obsidian_card(self) -> None:
+        message = (
+            "### Erga application tracker\n\n"
+            "**1 roles** · 1 applied\n\n"
+            "**Fall 2026**\n"
+            "📬 **Example Co** — Software Engineer Intern"
+        )
+        context = _FakePluginContext(
+            result=json.dumps(
+                {
+                    "structuredContent": {
+                        "enabled": True,
+                        "summary": {"applied": 1},
+                        "message": message,
+                    }
+                }
+            )
+        )
+        self.router.register(context)
+
+        result = context.commands["erga-tracker"]("")
+
+        self.assertEqual(result, message)
+        self.assertEqual(context.calls, [("mcp__erga_mcp__application_tracker", {})])
+        self.assertEqual(
+            context.commands["erga-tracker"]("all"),
+            "Usage: /erga-tracker",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

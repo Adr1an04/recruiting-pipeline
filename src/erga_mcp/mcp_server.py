@@ -42,6 +42,7 @@ from .resume_tailoring import (
     pdf_page_count,
 )
 from .store import ErgaStore
+from .tracker_view import read_application_tracker, render_tracker_message
 
 _READ_ONLY = ToolAnnotations(
     readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
@@ -790,6 +791,27 @@ def build_server(config_path: Path) -> FastMCP:
             cast(dict[str, object], _json_value(asdict(application)))
             for application in store.list_applications()
         ]
+
+    @server.tool(annotations=_READ_ONLY)
+    def application_tracker() -> dict[str, object]:
+        """Render the configured local Obsidian application tracker without modifying it."""
+        if not config.tracker.enabled or config.tracker.tracker_dir is None:
+            return {
+                "enabled": False,
+                "entries": [],
+                "summary": {},
+                "message": (
+                    "### Erga application tracker\n\n"
+                    "Obsidian application tracking is not configured for this Erga workspace."
+                ),
+            }
+        snapshot = read_application_tracker(config.tracker.tracker_dir)
+        return {
+            "enabled": True,
+            "entries": [asdict(entry) for entry in snapshot.entries],
+            "summary": snapshot.summary,
+            "message": render_tracker_message(snapshot),
+        }
 
     @server.tool(annotations=_READ_ONLY)
     def list_evidence() -> list[dict[str, object]]:

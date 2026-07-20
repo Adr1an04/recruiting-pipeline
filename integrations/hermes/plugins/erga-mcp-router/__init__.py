@@ -20,6 +20,7 @@ _DEFAULT_TOOL_NAME = "mcp__erga_mcp__intake_job_url"
 _DEFAULT_RESEARCH_TOOL_NAME = "mcp__erga_mcp__record_secondary_research"
 _DEFAULT_MONITOR_TOOL_NAME = "mcp__erga_mcp__install_mail_monitor_scripts"
 _DEFAULT_EXPORT_TOOL_NAME = "mcp__erga_mcp__export_data"
+_DEFAULT_TRACKER_TOOL_NAME = "mcp__erga_mcp__application_tracker"
 _DEFAULT_WEB_SEARCH_TOOL_NAME = "web_search"
 _DEFAULT_CRON_TOOL_NAME = "cronjob"
 _MONITOR_SETTINGS_NAME = "erga-mcp-monitor.json"
@@ -549,6 +550,7 @@ def register(
     tool_name = os.getenv("ERGA_MCP_TOOL", _DEFAULT_TOOL_NAME).strip()
     monitor_tool = os.getenv("ERGA_MCP_MONITOR_TOOL", _DEFAULT_MONITOR_TOOL_NAME).strip()
     export_tool = os.getenv("ERGA_MCP_EXPORT_TOOL", _DEFAULT_EXPORT_TOOL_NAME).strip()
+    tracker_tool = os.getenv("ERGA_MCP_TRACKER_TOOL", _DEFAULT_TRACKER_TOOL_NAME).strip()
     cron_tool = os.getenv("ERGA_MCP_CRON_TOOL", _DEFAULT_CRON_TOOL_NAME).strip()
     ready_timeout, retry_interval = _readiness_settings()
 
@@ -749,6 +751,30 @@ def register(
             }
         )
 
+    def tracker_command(raw_args: str) -> str:
+        if raw_args.strip():
+            return "Usage: /erga-tracker"
+        try:
+            tracker = ctx.dispatch_tool(tracker_tool, {})
+        except Exception as exc:
+            return f"Erga tracker failed: {exc}"
+        error_text = _dispatch_error_text(tracker)
+        if error_text:
+            return f"Erga tracker failed: {error_text}"
+        payload = next(
+            (
+                item
+                for item in _nested_objects(tracker)
+                if isinstance(item.get("message"), str)
+                and isinstance(item.get("enabled"), bool)
+                and isinstance(item.get("summary"), dict)
+            ),
+            None,
+        )
+        if payload is None:
+            return "Erga tracker failed: the tracker tool returned no display message."
+        return str(payload["message"])
+
     def export_command(raw_args: str) -> str:
         if raw_args.strip():
             return "Usage: /export-erga"
@@ -777,6 +803,11 @@ def register(
         handler=setup_monitor_command,
         description="Install mail monitoring and daily recruiting-history delivery in this chat.",
         args_hint="[history-days]",
+    )
+    ctx.register_command(
+        "erga-tracker",
+        handler=tracker_command,
+        description="Show the local Obsidian application tracker in a compact message card.",
     )
     ctx.register_command(
         "export-erga",

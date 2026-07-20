@@ -78,6 +78,7 @@ class McpServerTests(unittest.TestCase):
                 {
                     "pipeline_status",
                     "list_applications",
+                    "application_tracker",
                     "list_evidence",
                     "list_mail_events",
                     "intake_job_url",
@@ -92,6 +93,7 @@ class McpServerTests(unittest.TestCase):
             for name in {
                 "pipeline_status",
                 "list_applications",
+                "application_tracker",
                 "list_evidence",
                 "list_mail_events",
             }:

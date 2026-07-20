@@ -141,6 +141,7 @@ Core MCP tools include:
 | --- | --- |
 | `pipeline_status` | Read local record counts |
 | `list_applications` | Read local application records |
+| `application_tracker` | Render the configured local Obsidian tracker as a compact, read-only message card |
 | `list_evidence` | Read local evidence records |
 | `list_mail_events` | Read normalized local mail events |
 | `intake_job_url` | Research one job and build local review artifacts end to end |
@@ -149,6 +150,8 @@ Core MCP tools include:
 | `validate_tailored_resume` | Run the configured local LaTeX compiler |
 | `install_mail_monitor_scripts` | Prepare deterministic Hermes notification runners |
 | `export_data` | Build a private ZIP of local records and generated packages |
+
+With the optional `erga-mcp-router` Hermes plugin enabled, `/erga-tracker` renders that same local Obsidian tracker directly in the current chat. The output is compact Markdown so it remains readable across Discord, Signal, Telegram, Slack, and other Hermes platforms; it does not write to the vault or expose posting URLs.
 
 The full list of permissions and safety limits is in [`docs/security.md`](docs/security.md).
 
