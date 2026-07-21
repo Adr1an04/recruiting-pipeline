@@ -10,7 +10,16 @@ from uuid import uuid4
 from .models import Application, AuditEvent, Evidence, MailEvent
 
 APPLICATION_STATUSES = frozenset(
-    {"draft", "applied", "assessment", "interview", "offer", "rejected", "withdrawn"}
+    {
+        "draft",
+        "applied",
+        "oa",
+        "assessment",  # Backward-compatible alias for existing local records.
+        "interview",
+        "offer",
+        "rejected",
+        "withdrawn",
+    }
 )
 
 _SCHEMA = """

@@ -42,6 +42,27 @@ class TrackerViewTests(unittest.TestCase):
         self.assertIn("Next: Review résumé", message)
         self.assertNotIn("https://example.test", message)
 
+    def test_uses_distinct_oa_interview_and_offer_icons(self) -> None:
+        with TemporaryDirectory() as directory:
+            tracker_dir = Path(directory)
+            (tracker_dir / "Fall 2026 Application Tracker.md").write_text(
+                "| Company | Role | Location / work mode | Source | Status | Applied | "
+                "Next action | Contact / link |\n"
+                "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+                "| Example OA | Engineer | Remote | Source | OA | 2026-07-20 | Prepare | Note |\n"
+                "| Example Interview | Engineer | Remote | Source | Interview | 2026-07-20 | "
+                "Prepare | Note |\n"
+                "| Example Offer | Engineer | Remote | Source | Offer | 2026-07-20 | Evaluate | "
+                "Note |\n",
+                encoding="utf-8",
+            )
+
+            message = render_tracker_message(read_application_tracker(tracker_dir))
+
+        self.assertIn("🧪 **Example OA**", message)
+        self.assertIn("🗣️ **Example Interview**", message)
+        self.assertIn("🎉 **Example Offer**", message)
+
     def test_filters_by_company_role_status_or_cycle(self) -> None:
         with TemporaryDirectory() as directory:
             tracker_dir = Path(directory)

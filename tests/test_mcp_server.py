@@ -13,6 +13,8 @@ from unittest.mock import patch
 
 from erga_mcp.config import DEFAULT_CONFIG
 from erga_mcp.mcp_server import (
+    IntakeJobResult,
+    IntakeValidationResult,
     _compile_intake_proposal,
     _metadata_from_url,
     build_server,
@@ -86,6 +88,8 @@ class McpServerTests(unittest.TestCase):
                     "install_mail_monitor_scripts",
                     "export_data",
                     "record_secondary_research",
+                    "create_research_brief",
+                    "record_deep_research",
                     "prepare_job_workspace",
                     "create_tailored_resume",
                     "validate_tailored_resume",
@@ -117,6 +121,66 @@ class McpServerTests(unittest.TestCase):
             self.assertTrue(mail_sync_annotations.openWorldHint)
             self.assertFalse(resume_annotations.readOnlyHint)
             self.assertFalse(validation_annotations.readOnlyHint)
+
+    def test_creates_briefs_and_deep_dossiers_only_for_existing_packages(self) -> None:
+        with TemporaryDirectory() as directory:
+            package_dir = Path(directory) / "package"
+            research_dir = package_dir / "research"
+            research_dir.mkdir(parents=True)
+            (research_dir / "role-research.md").write_text(
+                "# Example Co — Engineer research\n", encoding="utf-8"
+            )
+            config_path = Path(directory) / "config.toml"
+            config_path.write_text(DEFAULT_CONFIG, encoding="utf-8")
+            server = build_server(config_path)
+            existing = IntakeJobResult(
+                package_dir=str(package_dir),
+                job_snapshot="",
+                selected_evidence="",
+                selection_strategy="",
+                proposal_tex="",
+                diff="",
+                claim_report="",
+                validation=IntakeValidationResult(returncode=None, pdf=None),
+            )
+            result_json = json.dumps(
+                {
+                    "data": {
+                        "web": [
+                            {
+                                "title": "Interview report",
+                                "url": "https://www.reddit.com/r/example/comments/123/report/",
+                            }
+                        ]
+                    }
+                }
+            )
+
+            with patch(
+                "erga_mcp.mcp_server._existing_intake_result_by_identity", return_value=existing
+            ):
+                brief: Any = asyncio.run(
+                    server.call_tool(
+                        "create_research_brief",
+                        {"job_url": "https://jobs.example.test/123", "stage": "oa"},
+                    )
+                )
+                deep: Any = asyncio.run(
+                    server.call_tool(
+                        "record_deep_research",
+                        {
+                            "job_url": "https://jobs.example.test/123",
+                            "stage": "interview",
+                            "searches": [{"query": "Example interview", "result": result_json}],
+                        },
+                    )
+                )
+
+        self.assertEqual(Path(cast(dict[str, Any], brief[1])["research_brief"]).name, "oa-brief.md")
+        self.assertEqual(
+            Path(cast(dict[str, Any], deep[1])["deep_research_note"]).name,
+            "interview-deep-research.md",
+        )
 
     def test_exposes_one_job_url_tool_for_end_to_end_intake(self) -> None:
         with TemporaryDirectory() as directory:

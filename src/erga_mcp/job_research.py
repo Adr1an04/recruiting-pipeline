@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 _CYCLE = re.compile(r"\b(Spring|Summer|Fall|Winter)\s+(20\d{2})\b", re.IGNORECASE)
@@ -787,3 +788,173 @@ def _render_search_result(raw_result: str) -> str:
         return "\n".join(rendered)
     quoted = "\n".join(f"> {line}" if line else ">" for line in raw_result.splitlines())
     return quoted or "> No results returned."
+
+
+_STAGE_RESEARCH = {
+    "oa": {
+        "brief_title": "OA preparation brief",
+        "deep_title": "OA research dossier",
+        "focus": (
+            "Confirm the assessment platform, duration, deadline, accommodations, and whether the "
+            "assessment is role-specific. Prepare from legitimate themes and skills—not leaked "
+            "questions, answer keys, or other restricted assessment content."
+        ),
+        "queries": (
+            '"{company}" "{role}" online assessment',
+            'site:reddit.com "{company}" OA "{role}"',
+            'site:reddit.com "{company}" CodeSignal OR HackerRank OR assessment',
+        ),
+        "sections": (
+            "## Assessment format and logistics",
+            "## Repeated community patterns (unverified)",
+            "## Preparation plan",
+            "## What not to overfit to",
+        ),
+    },
+    "interview": {
+        "brief_title": "Interview preparation brief",
+        "deep_title": "Interview dossier",
+        "focus": (
+            "Review the official role requirements, business context, likely process signals, and "
+            "the concrete experiences to prepare. Community reports can suggest themes, but do not "
+            "treat any single report as a prediction."
+        ),
+        "queries": (
+            '"{company}" "{role}" interview process',
+            'site:reddit.com "{company}" interview "{role}"',
+            'site:reddit.com "{company}" interview loop recruiter screen',
+        ),
+        "sections": (
+            "## Company and role context",
+            "## Process and evaluation signals (unverified)",
+            "## Technical and behavioral preparation",
+            "## Questions to ask the team",
+        ),
+    },
+    "offer": {
+        "brief_title": "Offer evaluation brief",
+        "deep_title": "Offer evaluation dossier",
+        "focus": (
+            "Gather the facts needed to compare total compensation, equity mechanics, benefits, "
+            "team conditions, and business risk. Community discussion is context only; "
+            "verify terms with the written offer and the employer."
+        ),
+        "queries": (
+            '"{company}" "{role}" compensation',
+            'site:reddit.com "{company}" offer compensation benefits',
+            '"{company}" funding revenue layoffs news',
+        ),
+        "sections": (
+            "## Compensation and equity questions",
+            "## Benefits, location, and work-policy questions",
+            "## Company and team risk signals (unverified)",
+            "## Negotiation and decision checklist",
+        ),
+    },
+}
+
+
+def _stage_research_config(stage: str) -> tuple[str, dict[str, Any]]:
+    normalized = stage.strip().casefold()
+    aliases = {"assessment": "oa", "online assessment": "oa", "interviews": "interview"}
+    normalized = aliases.get(normalized, normalized)
+    config = _STAGE_RESEARCH.get(normalized)
+    if config is None:
+        allowed = ", ".join(_STAGE_RESEARCH)
+        raise ValueError(f"research stage must be one of: {allowed}")
+    return normalized, config
+
+
+def _stage_research_subject(package_dir: Path) -> tuple[str, str]:
+    role_research = package_dir / "research" / "role-research.md"
+    if role_research.is_file():
+        match = re.search(
+            r"^#\s+(.+?)\s+—\s+(.+?)\s+research\s*$",
+            role_research.read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
+        if match is not None:
+            return match.group(1).strip(), match.group(2).strip()
+    return "company", "role"
+
+
+def write_stage_research(
+    *,
+    package_dir: Path,
+    stage: str,
+    depth: str,
+    captured_at: str,
+    searches: Sequence[tuple[str, str]] = (),
+) -> Path:
+    """Write a fast stage brief or a cited deep dossier for an OA, interview, or offer."""
+    normalized_stage, config = _stage_research_config(stage)
+    normalized_depth = depth.strip().casefold()
+    if normalized_depth not in {"brief", "deep"}:
+        raise ValueError("research depth must be 'brief' or 'deep'")
+    research_dir = package_dir / "research"
+    research_dir.mkdir(parents=True, exist_ok=True)
+    role_research = research_dir / "role-research.md"
+    role_link = (
+        "[official role research](role-research.md)"
+        if role_research.is_file()
+        else "official role research"
+    )
+    title_key = f"{normalized_depth}_title"
+    title = str(config[title_key])
+    company, role = _stage_research_subject(package_dir)
+    configured_queries = cast(tuple[str, ...], config["queries"])
+    queries = tuple(query.format(company=company, role=role) for query in configured_queries)
+    sections = cast(tuple[str, ...], config["sections"])
+    query_list = "\n".join(f"- `{query}`" for query in queries)
+    rendered = (
+        f"# {title}\n\n"
+        f"Stage: {normalized_stage.upper()} · Generated: {captured_at}\n\n"
+        "This artifact is stage-gated: it is intended only after an application progresses to an "
+        "OA, interview, or offer. It keeps official facts separate from unverified web and "
+        "community reports.\n\n"
+        "## Official grounding\n\n"
+        f"- Start with the {role_link}; it remains the source of record for role requirements.\n"
+        f"- Focus: {config['focus']}\n\n"
+        "## Suggested research queries\n\n"
+        f"{query_list}\n"
+    )
+    if normalized_depth == "brief":
+        rendered += (
+            "\n## Fast checklist\n\n"
+            "- Confirm the current stage, deadline, recruiter instructions, and official job "
+            "scope.\n"
+            "- Run the suggested searches only if the result will affect preparation or a "
+            "decision.\n"
+            "- Upgrade to a Deep dossier when the user wants cited community and market context.\n"
+        )
+        filename = f"{normalized_stage}-brief.md"
+    else:
+        source_sections: list[str] = []
+        for query, raw_result in searches[:8]:
+            safe_query = _SPACE.sub(" ", query).strip()[:400]
+            source_sections.append(
+                f"### Search: {safe_query}\n\n{_render_search_result(raw_result.strip()[:30_000])}"
+            )
+        rendered += "\n\n".join(
+            f"{section}\n\n"
+            "- Synthesize only recurring, recent signals from the cited leads below. "
+            "Mark conflicts and uncertainty rather than forcing a conclusion."
+            for section in sections
+        )
+        rendered += (
+            "\n\n## Cited web and community leads (unverified)\n\n"
+            "These leads may be stale, role-specific, or unrepresentative. Verify material "
+            "claims against official sources, direct recruiter answers, and the written offer "
+            "where applicable.\n\n"
+            + (
+                "\n\n".join(source_sections)
+                if source_sections
+                else "- No host-provided searches recorded yet."
+            )
+            + "\n"
+        )
+        filename = f"{normalized_stage}-deep-research.md"
+    path = research_dir / filename
+    if not path.is_file() or path.read_text(encoding="utf-8") != rendered:
+        path.write_text(rendered, encoding="utf-8")
+    return path

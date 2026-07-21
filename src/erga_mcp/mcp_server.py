@@ -35,6 +35,7 @@ from .job_research import (
     official_job_text,
     write_job_research,
     write_secondary_research,
+    write_stage_research,
 )
 from .job_workspace import create_job_workspace
 from .resume import (
@@ -1184,6 +1185,70 @@ def build_server(config_path: Path) -> FastMCP:
         )
         return {
             "secondary_research_note": str(path),
+            "searches_recorded": len(normalized),
+        }
+
+    @server.tool(
+        title="Create a fast stage-gated research brief",
+        description=(
+            "Create a fast, official-grounded preparation brief only after an application reaches "
+            "an OA, interview, or offer. It does not search the web. Use it first to get a concise "
+            "checklist and targeted research queries; use record_deep_research only when broader "
+            "cited web and community context is worth the extra work."
+        ),
+        annotations=_LOCAL_WRITE,
+    )
+    def create_research_brief(job_url: str, stage: str) -> dict[str, object]:
+        """Write a stage-specific local research brief for an already-intaked job."""
+        existing = _existing_intake_result_by_identity(
+            output_root=config.resume.output_root,
+            job_url=job_url,
+        )
+        if existing is None:
+            raise ValueError("intake_job_url must complete before a research brief is created")
+        path = write_stage_research(
+            package_dir=Path(existing.package_dir),
+            stage=stage,
+            depth="brief",
+            captured_at=datetime.now(UTC).isoformat(),
+        )
+        return {"research_brief": str(path), "stage": stage.strip().casefold()}
+
+    @server.tool(
+        title="Record a cited deep stage-research dossier",
+        description=(
+            "Persist host-provided search results as a cited Deep dossier for an OA, interview, or "
+            "offer. Search results and Reddit/community reports remain explicitly unverified "
+            "and separate from official job facts. Do not use this tool for leaked assessment "
+            "content, answer keys, or other restricted material."
+        ),
+        annotations=_LOCAL_WRITE,
+    )
+    def record_deep_research(
+        job_url: str,
+        stage: str,
+        searches: list[SecondarySearchInput],
+    ) -> dict[str, object]:
+        """Write a stage-specific deep dossier from bounded host-provided search results."""
+        existing = _existing_intake_result_by_identity(
+            output_root=config.resume.output_root,
+            job_url=job_url,
+        )
+        if existing is None:
+            raise ValueError("intake_job_url must complete before deep research is recorded")
+        normalized = [(item.query, item.result) for item in searches[:8]]
+        if not normalized:
+            raise ValueError("at least one search result is required for deep research")
+        path = write_stage_research(
+            package_dir=Path(existing.package_dir),
+            stage=stage,
+            depth="deep",
+            captured_at=datetime.now(UTC).isoformat(),
+            searches=normalized,
+        )
+        return {
+            "deep_research_note": str(path),
+            "stage": stage.strip().casefold(),
             "searches_recorded": len(normalized),
         }
 

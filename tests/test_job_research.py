@@ -11,6 +11,7 @@ from erga_mcp.job_research import (
     render_job_research,
     write_job_research,
     write_secondary_research,
+    write_stage_research,
 )
 
 
@@ -174,6 +175,52 @@ class JobResearchTests(unittest.TestCase):
 
             self.assertEqual(first, second)
             self.assertEqual(second.stat().st_mtime_ns, original_mtime)
+
+    def test_writes_stage_gated_brief_and_deep_dossier_without_conflating_sources(self) -> None:
+        with TemporaryDirectory() as directory:
+            package_dir = Path(directory)
+            research_dir = package_dir / "research"
+            research_dir.mkdir()
+            (research_dir / "role-research.md").write_text(
+                "# Example — Engineer research\n", encoding="utf-8"
+            )
+            search_result = json.dumps(
+                {
+                    "data": {
+                        "web": [
+                            {
+                                "title": "Candidate process report",
+                                "url": "https://www.reddit.com/r/example/comments/123/process/",
+                                "description": "A candidate's report from a past cycle.",
+                            }
+                        ]
+                    }
+                }
+            )
+
+            brief = write_stage_research(
+                package_dir=package_dir,
+                stage="oa",
+                depth="brief",
+                captured_at="2026-07-21T00:00:00+00:00",
+            )
+            deep = write_stage_research(
+                package_dir=package_dir,
+                stage="interview",
+                depth="deep",
+                captured_at="2026-07-21T00:00:00+00:00",
+                searches=[("Example engineer interview site:reddit.com", search_result)],
+            )
+
+            self.assertEqual(brief.name, "oa-brief.md")
+            self.assertIn("OA preparation", brief.read_text(encoding="utf-8"))
+            self.assertIn("leaked questions", brief.read_text(encoding="utf-8"))
+            self.assertEqual(deep.name, "interview-deep-research.md")
+            deep_text = deep.read_text(encoding="utf-8")
+            self.assertIn("Interview dossier", deep_text)
+            self.assertIn("unverified", deep_text)
+            self.assertIn("Candidate process report", deep_text)
+            self.assertIn("https://www.reddit.com/r/example/comments/123/process/", deep_text)
 
     def test_secondary_search_results_are_readable_cited_and_separate(self) -> None:
         with TemporaryDirectory() as directory:

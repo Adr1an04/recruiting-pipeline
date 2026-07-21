@@ -17,8 +17,10 @@ _TABLE_HEADER = (
 _TRACKER_SUFFIXES = (" Application Tracker", " Applications")
 _STATUS_ICONS = {
     "applied": "📬",
+    "oa": "🧪",
+    "online assessment": "🧪",
     "assessment": "🧪",
-    "interview": "🗓️",
+    "interview": "🗣️",
     "offer": "🎉",
     "rejected": "⛔",
     "withdrawn": "↩️",
