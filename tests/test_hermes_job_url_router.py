@@ -190,6 +190,90 @@ class HermesJobUrlRouterTests(unittest.TestCase):
         self.assertIn("Do not call a browser", injected["context"])
         self.assertIn("whether deterministic tailoring made", injected["context"])
 
+    def test_records_provider_usage_for_the_application_intaked_in_the_same_turn(self) -> None:
+        context = _FakePluginContext(
+            result='{"package_dir":"/tmp/example","application_id":"app_example"}'
+        )
+        self.router.register(context)
+        url = "https://jobs.ashbyhq.com/example/00000000-0000-0000-0000-000000000000"
+
+        context.hooks["pre_llm_call"](
+            user_message=url,
+            session_id="session-1",
+            turn_id="turn-1",
+            platform="discord",
+        )
+        context.hooks["post_api_request"](
+            session_id="session-1",
+            turn_id="turn-1",
+            api_request_id="request-1",
+            model="test-model",
+            usage={"input_tokens": 12, "output_tokens": 3},
+        )
+        context.hooks["post_api_request"](
+            session_id="session-1",
+            turn_id="turn-1",
+            api_request_id="request-1",
+            model="test-model",
+            usage={"input_tokens": 12, "output_tokens": 3},
+        )
+        context.hooks["post_llm_call"](session_id="session-1", turn_id="turn-1")
+
+        self.assertEqual(
+            context.calls,
+            [
+                ("mcp__erga_mcp__intake_job_url", {"job_url": url}),
+                (
+                    "mcp__erga_mcp__record_token_usage",
+                    {
+                        "application_id": "app_example",
+                        "operation": "hermes_llm_call",
+                        "input_tokens": 12,
+                        "output_tokens": 3,
+                        "model": "test-model",
+                    },
+                ),
+            ],
+        )
+
+    def test_records_usage_after_an_empty_callback_with_the_same_request_id(self) -> None:
+        context = _FakePluginContext(
+            result='{"package_dir":"/tmp/example","application_id":"app_example"}'
+        )
+        self.router.register(context)
+        url = "https://jobs.ashbyhq.com/example/00000000-0000-0000-0000-000000000000"
+        context.hooks["pre_llm_call"](
+            user_message=url,
+            session_id="session-1",
+            turn_id="turn-1",
+            platform="discord",
+        )
+        for usage in (
+            {"input_tokens": 0, "output_tokens": 0},
+            {"input_tokens": 3, "output_tokens": 4},
+        ):
+            context.hooks["post_api_request"](
+                session_id="session-1",
+                turn_id="turn-1",
+                api_request_id="request-1",
+                model="test-model",
+                usage=usage,
+            )
+
+        self.assertEqual(
+            context.calls[-1],
+            (
+                "mcp__erga_mcp__record_token_usage",
+                {
+                    "application_id": "app_example",
+                    "operation": "hermes_llm_call",
+                    "input_tokens": 3,
+                    "output_tokens": 4,
+                    "model": "test-model",
+                },
+            ),
+        )
+
     def test_message_reply_attaches_a_successfully_validated_resume_pdf(self) -> None:
         with TemporaryDirectory() as directory:
             package_dir = Path(directory) / "application"

@@ -24,6 +24,7 @@ _DEFAULT_TRACKER_TOOL_NAME = "mcp__erga_mcp__application_tracker"
 _DEFAULT_MAIL_SYNC_TOOL_NAME = "mcp__erga_mcp__sync_recruiting_mail"
 _DEFAULT_WEB_SEARCH_TOOL_NAME = "web_search"
 _DEFAULT_CRON_TOOL_NAME = "cronjob"
+_DEFAULT_TOKEN_TOOL_NAME = "mcp__erga_mcp__record_token_usage"
 _MONITOR_SETTINGS_NAME = "erga-mcp-monitor.json"
 _MONITOR_MAIL_SCRIPT_NAME = "erga-mcp-mail.py"
 _MONITOR_HISTORY_SCRIPT_NAME = "erga-mcp-history.py"
@@ -117,6 +118,10 @@ _ROUTED_TURNS: OrderedDict[tuple[str, str, str], str | None] = OrderedDict()
 _ROUTED_TURNS_LOCK = threading.Lock()
 _PENDING_ATTACHMENTS: OrderedDict[str, str] = OrderedDict()
 _PENDING_ATTACHMENTS_LOCK = threading.Lock()
+_PENDING_TOKEN_APPLICATIONS: OrderedDict[tuple[str, str], str] = OrderedDict()
+_PENDING_TOKEN_APPLICATIONS_LOCK = threading.Lock()
+_RECORDED_TOKEN_REQUESTS: OrderedDict[tuple[str, str, str], None] = OrderedDict()
+_RECORDED_TOKEN_REQUESTS_LOCK = threading.Lock()
 _NON_MESSAGING_PLATFORMS = frozenset({"", "api", "api_server", "cli", "local"})
 
 
@@ -464,6 +469,81 @@ def _pop_pending_attachment(session_id: str) -> str | None:
         return _PENDING_ATTACHMENTS.pop(session_id, None)
 
 
+def _application_id_from_result(result: object) -> str | None:
+    """Extract the local application ID from a direct or envelope-wrapped MCP result."""
+    if isinstance(result, str):
+        try:
+            result = json.loads(result)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(result, dict):
+        return None
+    application_id = result.get("application_id")
+    if isinstance(application_id, str) and application_id:
+        return application_id
+    for key in ("data", "result"):
+        nested = result.get(key)
+        if isinstance(nested, dict):
+            application_id = _application_id_from_result(nested)
+            if application_id:
+                return application_id
+    return None
+
+
+def _remember_token_application(session_id: str, turn_id: str, application_id: str | None) -> None:
+    if not turn_id or not application_id:
+        return
+    key = (session_id, turn_id)
+    with _PENDING_TOKEN_APPLICATIONS_LOCK:
+        _PENDING_TOKEN_APPLICATIONS[key] = application_id
+        _PENDING_TOKEN_APPLICATIONS.move_to_end(key)
+        while len(_PENDING_TOKEN_APPLICATIONS) > _MAX_REMEMBERED_TURNS:
+            _PENDING_TOKEN_APPLICATIONS.popitem(last=False)
+
+
+def _token_application_for_turn(session_id: str, turn_id: str) -> str | None:
+    if not turn_id:
+        return None
+    with _PENDING_TOKEN_APPLICATIONS_LOCK:
+        return _PENDING_TOKEN_APPLICATIONS.get((session_id, turn_id))
+
+
+def _clear_token_application(session_id: str, turn_id: str) -> None:
+    if not turn_id:
+        return
+    key = (session_id, turn_id)
+    with _PENDING_TOKEN_APPLICATIONS_LOCK:
+        _PENDING_TOKEN_APPLICATIONS.pop(key, None)
+    with _RECORDED_TOKEN_REQUESTS_LOCK:
+        for request_key in tuple(_RECORDED_TOKEN_REQUESTS):
+            if request_key[:2] == key:
+                _RECORDED_TOKEN_REQUESTS.pop(request_key, None)
+
+
+def _mark_token_request_recorded(session_id: str, turn_id: str, api_request_id: str) -> bool:
+    if not api_request_id:
+        return True
+    key = (session_id, turn_id, api_request_id)
+    with _RECORDED_TOKEN_REQUESTS_LOCK:
+        if key in _RECORDED_TOKEN_REQUESTS:
+            return False
+        _RECORDED_TOKEN_REQUESTS[key] = None
+        _RECORDED_TOKEN_REQUESTS.move_to_end(key)
+        while len(_RECORDED_TOKEN_REQUESTS) > _MAX_REMEMBERED_TURNS:
+            _RECORDED_TOKEN_REQUESTS.popitem(last=False)
+    return True
+
+
+def _token_count(usage: object, *keys: str) -> int:
+    if not isinstance(usage, dict):
+        return 0
+    for key in keys:
+        value = usage.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return value
+    return 0
+
+
 def _is_retryable_startup_error(error_text: str, *, tool_name: str) -> bool:
     """Recognize only the two transient errors emitted during MCP startup."""
     if error_text == f"Unknown tool: {tool_name}":
@@ -554,6 +634,7 @@ def register(
     tracker_tool = os.getenv("ERGA_MCP_TRACKER_TOOL", _DEFAULT_TRACKER_TOOL_NAME).strip()
     mail_sync_tool = os.getenv("ERGA_MCP_MAIL_SYNC_TOOL", _DEFAULT_MAIL_SYNC_TOOL_NAME).strip()
     cron_tool = os.getenv("ERGA_MCP_CRON_TOOL", _DEFAULT_CRON_TOOL_NAME).strip()
+    token_tool = os.getenv("ERGA_MCP_TOKEN_TOOL", _DEFAULT_TOKEN_TOOL_NAME).strip()
     ready_timeout, retry_interval = _readiness_settings()
 
     def dispatch(job_url: str) -> str:
@@ -584,6 +665,44 @@ def register(
                 )
             sleep_for(min(retry_interval, remaining))
 
+    def record_api_usage(
+        *,
+        session_id: str = "",
+        turn_id: str = "",
+        api_request_id: str = "",
+        model: str = "",
+        response_model: str = "",
+        usage: object = None,
+        **_: Any,
+    ) -> None:
+        """Persist provider-reported usage for each model call in an intaked job turn."""
+        application_id = _token_application_for_turn(session_id, turn_id)
+        if application_id is None or not token_tool:
+            return
+        input_tokens = _token_count(usage, "input_tokens", "prompt_tokens")
+        output_tokens = _token_count(usage, "output_tokens", "completion_tokens")
+        if input_tokens == 0 and output_tokens == 0:
+            return
+        if not _mark_token_request_recorded(session_id, turn_id, api_request_id):
+            return
+        try:
+            ctx.dispatch_tool(
+                token_tool,
+                {
+                    "application_id": application_id,
+                    "operation": "hermes_llm_call",
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "model": response_model or model,
+                },
+            )
+        except Exception:
+            # Usage telemetry is auxiliary; never disrupt the recruiting workflow.
+            return
+
+    def clear_api_usage(*, session_id: str = "", turn_id: str = "", **_: Any) -> None:
+        _clear_token_application(session_id, turn_id)
+
     def route_job_link(
         user_message: str | None = None,
         session_id: str = "",
@@ -599,6 +718,7 @@ def register(
             return None
         route_key = (session_id, turn_id, job_url)
         should_dispatch = True
+        result = ""
         if turn_id:
             with _ROUTED_TURNS_LOCK:
                 if route_key in _ROUTED_TURNS:
@@ -631,6 +751,7 @@ def register(
                 with _ROUTED_TURNS_LOCK:
                     _ROUTED_TURNS[route_key] = result
                     _ROUTED_TURNS.move_to_end(route_key)
+        _remember_token_application(session_id, turn_id, _application_id_from_result(result))
         _set_pending_attachment(session_id, _validated_pdf_from_result(result))
         return {
             "context": (
@@ -817,6 +938,8 @@ def register(
         return f'Recruiting pipeline export attached.\n\n[[as_document]]\nMEDIA:"{archive}"'
 
     ctx.register_hook("pre_llm_call", route_job_link)
+    ctx.register_hook("post_api_request", record_api_usage)
+    ctx.register_hook("post_llm_call", clear_api_usage)
     ctx.register_hook("transform_llm_output", attach_validated_resume)
     ctx.register_command(
         "intake-job",

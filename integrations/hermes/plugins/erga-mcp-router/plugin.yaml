@@ -6,4 +6,6 @@ author: Erga MCP contributors
 hermes_requires: ">=0.18.2"
 provides_hooks:
   - pre_llm_call
+  - post_api_request
+  - post_llm_call
   - transform_llm_output

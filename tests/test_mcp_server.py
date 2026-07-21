@@ -20,6 +20,7 @@ from erga_mcp.mcp_server import (
     build_server,
 )
 from erga_mcp.resume import LatexValidation
+from erga_mcp.store import ErgaStore
 
 
 class McpServerTests(unittest.TestCase):
@@ -66,6 +67,32 @@ class McpServerTests(unittest.TestCase):
         self.assertLessEqual(len(long_role[1]), 80)
         self.assertRegex(long_role[1], r"-[0-9a-f]{16}$")
 
+    def test_rejects_coerced_boolean_token_counts_at_the_mcp_boundary(self) -> None:
+        with TemporaryDirectory() as directory:
+            config_path = Path(directory) / "config.toml"
+            config_path.write_text(DEFAULT_CONFIG)
+            server = build_server(config_path)
+            store = ErgaStore(Path(directory) / "state" / "erga.sqlite3")
+            application = store.create_application(
+                company="Example",
+                role="Engineer",
+                source_url="https://example.test/job",
+                evidence_ids=[],
+            )
+
+            with self.assertRaises(Exception):
+                asyncio.run(
+                    server.call_tool(
+                        "record_token_usage",
+                        {
+                            "application_id": application.id,
+                            "operation": "test",
+                            "input_tokens": True,
+                            "output_tokens": 3,
+                        },
+                    )
+                )
+
     def test_exposes_read_and_explicit_local_workspace_tools(self) -> None:
         with TemporaryDirectory() as directory:
             config_path = Path(directory) / "config.toml"
@@ -83,6 +110,8 @@ class McpServerTests(unittest.TestCase):
                     "application_tracker",
                     "list_evidence",
                     "list_mail_events",
+                    "token_usage",
+                    "record_token_usage",
                     "sync_recruiting_mail",
                     "intake_job_url",
                     "install_mail_monitor_scripts",

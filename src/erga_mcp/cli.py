@@ -4,6 +4,7 @@ import argparse
 import getpass
 import json
 import os
+import sys
 from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
@@ -199,6 +200,12 @@ def _parser() -> argparse.ArgumentParser:
     applications_status.add_argument("--application-id", required=True)
     applications_status.add_argument("--status", required=True)
 
+    tokens = subcommands.add_parser(
+        "tokens", help="show recorded model token usage without estimating a dollar cost"
+    )
+    _config_argument(tokens)
+    tokens.add_argument("--application-id")
+
     export = subcommands.add_parser(
         "export", help="create a private ZIP bundle of pipeline state and job packages"
     )
@@ -309,6 +316,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 "mail_events": len(store.list_mail_events()),
             }
         )
+        return 0
+    if args.command == "tokens":
+        _print_json(store.token_usage_summary(application_id=args.application_id))
         return 0
     if args.command == "evidence" and args.evidence_command == "add":
         evidence = store.add_evidence(
@@ -455,6 +465,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
         )
         return 0
     raise AssertionError(f"unhandled command: {args.command}")
+
+
+def tokens_main() -> int:
+    """Entry point for the ergonomic `erga-tokens` token-report command."""
+    return main(["tokens", *sys.argv[1:]])
 
 
 if __name__ == "__main__":

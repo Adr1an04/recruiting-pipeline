@@ -57,6 +57,71 @@ class StoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "status must be one of"):
                 store.update_application_status(application.id, status="submitted magically")
 
+    def test_records_application_bound_token_usage_and_summarizes_input_and_output(self) -> None:
+        with TemporaryDirectory() as directory:
+            store = ErgaStore(Path(directory) / "erga.sqlite3")
+            application = store.create_application(
+                company="Example Systems",
+                role="Software Engineer",
+                source_url="https://jobs.example.test/123",
+                evidence_ids=[],
+            )
+
+            usage = store.record_token_usage(
+                application_id=application.id,
+                operation="deep_research",
+                input_tokens=1_200,
+                output_tokens=340,
+                model="example-model",
+            )
+            store.record_token_usage(
+                application_id=application.id,
+                operation="resume_tailoring",
+                input_tokens=800,
+                output_tokens=200,
+            )
+
+            self.assertEqual(usage.application_id, application.id)
+            self.assertEqual(usage.total_tokens, 1_540)
+            self.assertEqual(
+                store.token_usage_summary(application_id=application.id),
+                {
+                    "applications": 1,
+                    "events": 2,
+                    "input_tokens": 2_000,
+                    "output_tokens": 540,
+                    "total_tokens": 2_540,
+                },
+            )
+            self.assertEqual(
+                store.token_usage_summary(),
+                {
+                    "applications": 1,
+                    "events": 2,
+                    "input_tokens": 2_000,
+                    "output_tokens": 540,
+                    "total_tokens": 2_540,
+                },
+            )
+            self.assertEqual(store.audit_events()[0].action, "token_usage.recorded")
+
+            with self.assertRaisesRegex(ValueError, "input_tokens must be non-negative"):
+                store.record_token_usage(
+                    application_id=application.id,
+                    operation="bad",
+                    input_tokens=-1,
+                    output_tokens=0,
+                )
+            for invalid_value in (1.5, True, "12"):
+                with self.subTest(invalid_value=invalid_value):
+                    with self.assertRaisesRegex(ValueError, "must be an integer"):
+                        store.record_token_usage(
+                            application_id=application.id,
+                            operation="bad",
+                            input_tokens=invalid_value,  # type: ignore[arg-type]
+                            output_tokens=0,
+                        )
+
 
 if __name__ == "__main__":
     unittest.main()

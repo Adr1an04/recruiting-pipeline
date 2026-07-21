@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,7 +16,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 
 from .cli import DEFAULT_CONFIG_PATH
 from .config import ErgaConfig, load_config
@@ -215,6 +216,23 @@ def _json_value(value: object) -> object:
     if isinstance(value, list):
         return [_json_value(item) for item in value]
     return value
+
+
+def _combine_token_summaries(
+    summaries: Iterable[Mapping[str, int]],
+) -> dict[str, int]:
+    """Aggregate local application token totals for one canonical job identity."""
+    result = {
+        "applications": 0,
+        "events": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+    }
+    for summary in summaries:
+        for field in result:
+            result[field] += summary.get(field, 0)
+    return result
 
 
 def _safe_slug(value: str) -> str:
@@ -820,11 +838,29 @@ def build_server(config_path: Path) -> FastMCP:
         snapshot = filter_application_tracker(
             read_application_tracker(config.tracker.tracker_dir), query
         )
+        summaries_by_identity: dict[str, list[dict[str, int]]] = {}
+        for application in store.list_applications():
+            summaries_by_identity.setdefault(_job_identity(application.source_url), []).append(
+                store.token_usage_summary(application_id=application.id)
+            )
+        token_usage_by_source_url = {
+            entry.source_url: _combine_token_summaries(
+                summaries_by_identity.get(_job_identity(entry.source_url), [])
+            )
+            for entry in snapshot.entries
+            if entry.source_url
+        }
         return {
             "enabled": True,
             "entries": [asdict(entry) for entry in snapshot.entries],
             "summary": snapshot.summary,
-            "message": render_tracker_message(snapshot, max_entries=12, query=query),
+            "token_usage": store.token_usage_summary(),
+            "message": render_tracker_message(
+                snapshot,
+                max_entries=12,
+                query=query,
+                token_usage_by_source_url=token_usage_by_source_url,
+            ),
         }
 
     @server.tool(annotations=_READ_ONLY)
@@ -842,6 +878,36 @@ def build_server(config_path: Path) -> FastMCP:
             cast(dict[str, object], _json_value(asdict(event)))
             for event in store.list_mail_events()
         ]
+
+    @server.tool(annotations=_READ_ONLY)
+    def token_usage(application_id: str = "") -> dict[str, object]:
+        """Show recorded input, output, and total model tokens; no dollar-cost estimate is made."""
+        normalized = application_id.strip()
+        return cast(
+            dict[str, object],
+            store.token_usage_summary(application_id=normalized or None),
+        )
+
+    @server.tool(annotations=_LOCAL_WRITE)
+    def record_token_usage(
+        application_id: str,
+        operation: str,
+        input_tokens: StrictInt,
+        output_tokens: StrictInt,
+        model: str = "",
+    ) -> dict[str, object]:
+        """Record host-reported tokens against one local application without a dollar estimate."""
+        usage = store.record_token_usage(
+            application_id=application_id,
+            operation=operation,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=model or None,
+        )
+        return {
+            "usage": cast(dict[str, object], _json_value(asdict(usage))),
+            "summary": store.token_usage_summary(application_id=application_id),
+        }
 
     @server.tool(annotations=_NETWORK_READ_AND_WRITE)
     def sync_recruiting_mail() -> dict[str, object]:

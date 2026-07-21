@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from .models import Application, AuditEvent, Evidence, MailEvent
+from .models import Application, AuditEvent, Evidence, MailEvent, TokenUsage
 
 APPLICATION_STATUSES = frozenset(
     {
@@ -39,6 +39,16 @@ CREATE TABLE IF NOT EXISTS applications (
     evidence_ids_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS token_usage (
+    id TEXT PRIMARY KEY,
+    application_id TEXT NOT NULL REFERENCES applications(id),
+    operation TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL CHECK(typeof(input_tokens) = 'integer' AND input_tokens >= 0),
+    output_tokens INTEGER NOT NULL CHECK(typeof(output_tokens) = 'integer' AND output_tokens >= 0),
+    model TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS token_usage_application_id_idx ON token_usage(application_id);
 CREATE TABLE IF NOT EXISTS mail_events (
     message_id TEXT PRIMARY KEY,
     received_at TEXT NOT NULL,
@@ -71,6 +81,14 @@ def _as_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+def _require_token_count(value: object, *, field: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{field} must be an integer")
+    if value < 0:
+        raise ValueError(f"{field} must be non-negative")
+    return value
+
+
 class ErgaStore:
     """A local SQLite store. It never talks to external services."""
 
@@ -80,6 +98,7 @@ class ErgaStore:
     def _connection(self) -> sqlite3.Connection:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.database_path)
+        connection.execute("PRAGMA foreign_keys = ON")
         connection.row_factory = sqlite3.Row
         return connection
 
@@ -164,6 +183,89 @@ class ErgaStore:
             )
             for row in rows
         ]
+
+    def record_token_usage(
+        self,
+        *,
+        application_id: str,
+        operation: str,
+        input_tokens: int,
+        output_tokens: int,
+        model: str | None = None,
+    ) -> TokenUsage:
+        """Record user-visible model token counts against an existing local application."""
+        input_tokens = _require_token_count(input_tokens, field="input_tokens")
+        output_tokens = _require_token_count(output_tokens, field="output_tokens")
+        normalized_operation = " ".join(operation.split())
+        if not normalized_operation:
+            raise ValueError("operation must not be empty")
+        normalized_model = " ".join(model.split()) if model else None
+        self.initialize()
+        usage = TokenUsage(
+            id=f"tok_{uuid4().hex}",
+            application_id=application_id,
+            operation=normalized_operation,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=normalized_model,
+            created_at=_now(),
+        )
+        with closing(self._connection()) as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM applications WHERE id = ?", (application_id,)
+            ).fetchone()
+            if exists is None:
+                raise ValueError("application does not exist")
+            connection.execute(
+                "INSERT INTO token_usage VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    usage.id,
+                    usage.application_id,
+                    usage.operation,
+                    usage.input_tokens,
+                    usage.output_tokens,
+                    usage.model,
+                    _as_text(usage.created_at),
+                ),
+            )
+            self._record_audit(
+                connection,
+                "token_usage.recorded",
+                usage.id,
+                {
+                    "application_id": usage.application_id,
+                    "input_tokens": usage.input_tokens,
+                    "operation": usage.operation,
+                    "output_tokens": usage.output_tokens,
+                },
+            )
+            connection.commit()
+        return usage
+
+    def token_usage_summary(self, *, application_id: str | None = None) -> dict[str, int]:
+        """Return token totals globally or for one application without estimating a dollar cost."""
+        self.initialize()
+        query = (
+            "SELECT COUNT(*) AS events, COUNT(DISTINCT application_id) AS applications, "
+            "COALESCE(SUM(input_tokens), 0) AS input_tokens, "
+            "COALESCE(SUM(output_tokens), 0) AS output_tokens FROM token_usage"
+        )
+        parameters: tuple[str, ...] = ()
+        if application_id is not None:
+            query += " WHERE application_id = ?"
+            parameters = (application_id,)
+        with closing(self._connection()) as connection:
+            row = connection.execute(query, parameters).fetchone()
+        assert row is not None
+        input_tokens = int(row["input_tokens"])
+        output_tokens = int(row["output_tokens"])
+        return {
+            "applications": int(row["applications"]),
+            "events": int(row["events"]),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        }
 
     def update_application_metadata(
         self,

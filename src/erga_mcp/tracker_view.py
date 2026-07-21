@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,6 +17,7 @@ _TABLE_HEADER = (
     "contact / link",
 )
 _TRACKER_SUFFIXES = (" Application Tracker", " Applications")
+_MARKDOWN_LINK = re.compile(r"\[[^]]*\]\((https?://[^)\s]+)\)")
 _STATUS_ICONS = {
     "applied": "📬",
     "oa": "🧪",
@@ -35,6 +38,7 @@ class TrackerEntry:
     company: str
     role: str
     location: str
+    source_url: str
     status: str
     applied: str
     next_action: str
@@ -72,6 +76,11 @@ def _tracker_paths(tracker_dir: Path) -> tuple[Path, ...]:
     return tuple(paths)
 
 
+def _source_url(source: str) -> str:
+    match = _MARKDOWN_LINK.search(source)
+    return match.group(1) if match is not None else ""
+
+
 def _entries_from_tracker(path: Path) -> tuple[TrackerEntry, ...]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -93,7 +102,7 @@ def _entries_from_tracker(path: Path) -> tuple[TrackerEntry, ...]:
             continue
         if len(cells) != len(_TABLE_HEADER):
             continue
-        company, role, location, _source, status, applied, next_action, _link = cells
+        company, role, location, source, status, applied, next_action, _link = cells
         if not company or not role:
             continue
         entries.append(
@@ -102,6 +111,7 @@ def _entries_from_tracker(path: Path) -> tuple[TrackerEntry, ...]:
                 company=company,
                 role=role,
                 location=location,
+                source_url=_source_url(source),
                 status=status or "Researching",
                 applied=applied,
                 next_action=next_action,
@@ -154,7 +164,11 @@ def _status_label(status: str) -> str:
 
 
 def render_tracker_message(
-    snapshot: TrackerSnapshot, *, max_entries: int = 20, query: str = ""
+    snapshot: TrackerSnapshot,
+    *,
+    max_entries: int = 20,
+    query: str = "",
+    token_usage_by_source_url: Mapping[str, Mapping[str, int]] | None = None,
 ) -> str:
     """Render an intentionally compact Markdown card that works across gateway platforms."""
     if max_entries < 1:
@@ -192,6 +206,14 @@ def render_tracker_message(
         lines.append(f"> {details}")
         if entry.next_action:
             lines.append(f"> Next: {_short(entry.next_action, limit=160)}")
+        usage = (token_usage_by_source_url or {}).get(entry.source_url)
+        if usage and usage.get("events", 0):
+            lines.append(
+                "> Tokens: "
+                f"{usage.get('input_tokens', 0):,} in · "
+                f"{usage.get('output_tokens', 0):,} out · "
+                f"{usage.get('total_tokens', 0):,} total"
+            )
     if total > len(displayed):
         lines.extend(["", f"Showing {len(displayed)} of {total} roles."])
     return "\n".join(lines)

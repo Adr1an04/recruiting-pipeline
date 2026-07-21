@@ -25,6 +25,21 @@ class Application:
 
 
 @dataclass(frozen=True)
+class TokenUsage:
+    id: str
+    application_id: str
+    operation: str
+    input_tokens: int
+    output_tokens: int
+    model: str | None
+    created_at: datetime
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+
+@dataclass(frozen=True)
 class AuditEvent:
     id: str
     action: str
