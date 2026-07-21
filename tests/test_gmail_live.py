@@ -20,7 +20,8 @@ class GmailLiveTests(unittest.TestCase):
         ):
             _run_gws(command)
 
-        self.assertEqual(run.call_args.args[0][:4], ["cmd.exe", "/d", "/s", "/c"])
+        self.assertTrue(run.call_args.args[0][0].casefold().endswith("cmd.exe"))
+        self.assertEqual(run.call_args.args[0][1:4], ["/d", "/s", "/c"])
         self.assertTrue(run.call_args.args[0][4].endswith("gws.cmd gmail users messages list"))
 
     def test_parses_gmail_metadata_without_body_content(self) -> None:

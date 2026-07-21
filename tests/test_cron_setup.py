@@ -58,7 +58,8 @@ class CronSetupTests(unittest.TestCase):
             if os.name == "nt":
                 fake_gws = root / "fake-gws.cmd"
                 fake_gws.write_text(
-                    f'@"{sys.executable}" "{fake_gws_script}" %*\n', encoding="utf-8"
+                    f'@echo off\r\ncall "{sys.executable}" "{fake_gws_script}" %*\r\n',
+                    encoding="utf-8",
                 )
             else:
                 fake_gws = fake_gws_script
