@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from email.utils import parseaddr
 
 from .models import MailEvent, RecruiterContact
@@ -9,6 +10,7 @@ _AUTOMATED_LOCAL_PART_MARKERS = (
     "noreply",
     "no-reply",
     "do_not_reply",
+    "do-not-reply",
     "donotreply",
     "notification",
     "recruiting",
@@ -16,12 +18,20 @@ _AUTOMATED_LOCAL_PART_MARKERS = (
     "jobs",
     "talent",
     "support",
+    "service",
+    "programs",
+    "resume",
     "system",
     "mailer-daemon",
     "assessment",
     "interview",
     "verification",
+    "admin",
+    "clientservices",
+    "workflow",
+    "sender",
 )
+_PERSONAL_MAILBOX = re.compile(r"^[a-z]{2,}[._-][a-z]{2,}(?:[._-][a-z]{2,})?$")
 
 
 def _is_automated_mailbox(local_part: str) -> bool:
@@ -46,6 +56,8 @@ def record_recruiter_contact_from_mail(
     if _is_automated_mailbox(local_part):
         return None
     normalized_name = " ".join(name.split()) or None
+    if normalized_name is None and _PERSONAL_MAILBOX.fullmatch(local_part) is None:
+        return None
     return store.upsert_recruiter_contact(
         email=normalized_email,
         name=normalized_name,

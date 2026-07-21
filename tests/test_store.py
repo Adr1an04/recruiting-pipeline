@@ -149,7 +149,7 @@ class StoreTests(unittest.TestCase):
             unnamed_event = MailEvent(
                 message_id="message-2",
                 received_at=datetime(2026, 7, 22, tzinfo=UTC),
-                sender="recruiter@company.test",
+                sender="alex.smith@company.test",
                 subject="New role",
                 kind="job.candidate",
                 confidence=0.7,
