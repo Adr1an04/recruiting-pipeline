@@ -117,6 +117,30 @@ def read_application_tracker(tracker_dir: Path) -> TrackerSnapshot:
     return TrackerSnapshot(entries=entries, summary=dict(sorted(counts.items())))
 
 
+def filter_application_tracker(snapshot: TrackerSnapshot, query: str) -> TrackerSnapshot:
+    """Return case-insensitive token matches across the human-searchable tracker fields."""
+    tokens = tuple(token.casefold() for token in query.split() if token.strip())
+    if not tokens:
+        return snapshot
+
+    def matches(entry: TrackerEntry) -> bool:
+        haystack = "\n".join(
+            (
+                entry.company,
+                entry.role,
+                entry.location,
+                entry.status,
+                entry.cycle,
+                entry.next_action,
+            )
+        ).casefold()
+        return all(token in haystack for token in tokens)
+
+    entries = tuple(entry for entry in snapshot.entries if matches(entry))
+    counts = Counter(entry.status.casefold() for entry in entries)
+    return TrackerSnapshot(entries=entries, summary=dict(sorted(counts.items())))
+
+
 def _short(value: str, *, limit: int) -> str:
     compact = " ".join(value.split())
     return compact if len(compact) <= limit else f"{compact[: limit - 1].rstrip()}…"
@@ -127,7 +151,9 @@ def _status_label(status: str) -> str:
     return f"{_STATUS_ICONS.get(normalized, '•')} {status}"
 
 
-def render_tracker_message(snapshot: TrackerSnapshot, *, max_entries: int = 20) -> str:
+def render_tracker_message(
+    snapshot: TrackerSnapshot, *, max_entries: int = 20, query: str = ""
+) -> str:
     """Render an intentionally compact Markdown card that works across gateway platforms."""
     if max_entries < 1:
         raise ValueError("max_entries must be positive")
@@ -139,7 +165,11 @@ def render_tracker_message(snapshot: TrackerSnapshot, *, max_entries: int = 20) 
 
     total = len(snapshot.entries)
     summary = " · ".join(f"{count} {status}" for status, count in snapshot.summary.items())
-    lines = ["### Erga application tracker", f"**{total} roles** · {summary}", ""]
+    lines = ["### Erga application tracker", f"**{total} roles** · {summary}"]
+    if query.strip():
+        noun = "match" if total == 1 else "matches"
+        lines.append(f"Search: {_short(query, limit=80)} · {total} {noun}")
+    lines.append("")
     displayed = snapshot.entries[:max_entries]
     current_cycle: str | None = None
     for entry in displayed:

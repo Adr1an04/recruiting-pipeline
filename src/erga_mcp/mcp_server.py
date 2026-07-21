@@ -48,7 +48,11 @@ from .resume_tailoring import (
     pdf_page_count,
 )
 from .store import ErgaStore
-from .tracker_view import read_application_tracker, render_tracker_message
+from .tracker_view import (
+    filter_application_tracker,
+    read_application_tracker,
+    render_tracker_message,
+)
 from .zoho_oauth import refresh_access_token
 
 _READ_ONLY = ToolAnnotations(
@@ -800,8 +804,8 @@ def build_server(config_path: Path) -> FastMCP:
         ]
 
     @server.tool(annotations=_READ_ONLY)
-    def application_tracker() -> dict[str, object]:
-        """Render the configured local Obsidian application tracker without modifying it."""
+    def application_tracker(query: str = "") -> dict[str, object]:
+        """Render or search the configured local Obsidian tracker without modifying it."""
         if not config.tracker.enabled or config.tracker.tracker_dir is None:
             return {
                 "enabled": False,
@@ -812,12 +816,14 @@ def build_server(config_path: Path) -> FastMCP:
                     "Obsidian application tracking is not configured for this Erga workspace."
                 ),
             }
-        snapshot = read_application_tracker(config.tracker.tracker_dir)
+        snapshot = filter_application_tracker(
+            read_application_tracker(config.tracker.tracker_dir), query
+        )
         return {
             "enabled": True,
             "entries": [asdict(entry) for entry in snapshot.entries],
             "summary": snapshot.summary,
-            "message": render_tracker_message(snapshot),
+            "message": render_tracker_message(snapshot, max_entries=12, query=query),
         }
 
     @server.tool(annotations=_READ_ONLY)

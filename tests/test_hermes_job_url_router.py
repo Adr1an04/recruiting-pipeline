@@ -685,10 +685,14 @@ class HermesJobUrlRouterTests(unittest.TestCase):
         result = context.commands["erga-tracker"]("")
 
         self.assertEqual(result, message)
-        self.assertEqual(context.calls, [("mcp__erga_mcp__application_tracker", {})])
+        self.assertEqual(context.calls, [("mcp__erga_mcp__application_tracker", {"query": ""})])
+        self.assertEqual(context.commands["erga-tracker"]("all"), message)
         self.assertEqual(
-            context.commands["erga-tracker"]("all"),
-            "Usage: /erga-tracker",
+            context.calls,
+            [
+                ("mcp__erga_mcp__application_tracker", {"query": ""}),
+                ("mcp__erga_mcp__application_tracker", {"query": "all"}),
+            ],
         )
 
 

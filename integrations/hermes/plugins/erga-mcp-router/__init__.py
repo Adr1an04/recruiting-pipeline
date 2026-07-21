@@ -754,10 +754,9 @@ def register(
         )
 
     def tracker_command(raw_args: str) -> str:
-        if raw_args.strip():
-            return "Usage: /erga-tracker"
+        query = raw_args.strip()
         try:
-            tracker = ctx.dispatch_tool(tracker_tool, {})
+            tracker = ctx.dispatch_tool(tracker_tool, {"query": query})
         except Exception as exc:
             return f"Erga tracker failed: {exc}"
         error_text = _dispatch_error_text(tracker)
@@ -834,7 +833,10 @@ def register(
     ctx.register_command(
         "erga-tracker",
         handler=tracker_command,
-        description="Show the local Obsidian application tracker in a compact message card.",
+        description=(
+            "Show or search the local Obsidian application tracker in a compact message card."
+        ),
+        args_hint="[company, role, status, or cycle]",
     )
     ctx.register_command(
         "erga-mail-sync",

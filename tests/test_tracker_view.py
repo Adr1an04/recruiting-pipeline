@@ -4,7 +4,11 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from erga_mcp.tracker_view import read_application_tracker, render_tracker_message
+from erga_mcp.tracker_view import (
+    filter_application_tracker,
+    read_application_tracker,
+    render_tracker_message,
+)
 
 
 class TrackerViewTests(unittest.TestCase):
@@ -38,7 +42,28 @@ class TrackerViewTests(unittest.TestCase):
         self.assertIn("Next: Review résumé", message)
         self.assertNotIn("https://example.test", message)
 
-    def test_returns_an_empty_state_when_no_tracker_rows_exist(self) -> None:
+    def test_filters_by_company_role_status_or_cycle(self) -> None:
+        with TemporaryDirectory() as directory:
+            tracker_dir = Path(directory)
+            (tracker_dir / "Fall 2026 Application Tracker.md").write_text(
+                "| Company | Role | Location / work mode | Source | Status | Applied | "
+                "Next action | Contact / link |\n"
+                "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+                "| Cloudflare | Software Engineer Intern | Austin | Source | Applied | "
+                "2026-07-20 | Await update | Note |\n"
+                "| Snowflake | Software Engineer Intern | Zurich | Source | Researching | "
+                "| Review | Note |\n",
+                encoding="utf-8",
+            )
+            matches = filter_application_tracker(
+                read_application_tracker(tracker_dir), "cloudflare"
+            )
+            message = render_tracker_message(matches, query="cloudflare")
+
+        self.assertEqual([entry.company for entry in matches.entries], ["Cloudflare"])
+        self.assertIn("Search: cloudflare · 1 match", message)
+        self.assertNotIn("Snowflake", message)
+
         with TemporaryDirectory() as directory:
             snapshot = read_application_tracker(Path(directory))
 
