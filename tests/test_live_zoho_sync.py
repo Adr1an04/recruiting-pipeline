@@ -75,6 +75,39 @@ class LiveZohoSyncTests(unittest.TestCase):
         self.assertIn("folderId=jobs-1", urls[-1])
         self.assertNotIn("folderId=inbox-1", urls[-1])
 
+    def test_reads_message_content_without_persisting_it(self) -> None:
+        responses = iter(
+            [
+                {"data": [{"accountId": "account-1"}]},
+                {"data": [{"folderId": "inbox-1", "folderType": "Inbox", "folderName": "Inbox"}]},
+                {"data": [{"messageId": "message-1", "receivedTime": "1784556770435"}]},
+                {"data": {"content": "Your application has been received."}},
+            ]
+        )
+
+        class Response:
+            def __init__(self, payload: object) -> None:
+                self.payload = payload
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *_: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(self.payload).encode("utf-8")
+
+        with patch(
+            "erga_mcp.integrations.zoho_live.urlopen",
+            lambda *_args, **_kwargs: Response(next(responses)),
+        ):
+            messages = fetch_inbox_metadata(
+                access_token="access-token", folder="Inbox", limit=1, include_content=True
+            )
+
+        self.assertEqual(messages[0].content, "Your application has been received.")
+
     def test_reads_each_page_until_the_configured_folder_is_exhausted(self) -> None:
         urls: list[str] = []
         responses = iter(

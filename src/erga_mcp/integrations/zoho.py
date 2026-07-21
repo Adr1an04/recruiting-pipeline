@@ -21,6 +21,7 @@ class MailMessageMetadata:
     sender: str
     subject: str
     preview: str
+    content: str = ""
 
 
 class ReadOnlyMailSource(Protocol):

@@ -61,7 +61,11 @@ class MailSyncMcpTests(unittest.TestCase):
         self.assertNotIn(message.preview, payload["message"])
         self.assertNotIn(message.subject, payload["message"])
         fetch.assert_called_once_with(
-            access_token="test-token", folder="Inbox", max_messages=1000, page_size=100
+            access_token="test-token",
+            folder="Inbox",
+            max_messages=1000,
+            page_size=100,
+            include_content=True,
         )
         self.assertEqual(reconcile.call_args.kwargs["tracker_dir"], root / "tracker")
         self.assertEqual(len(reconcile.call_args.kwargs["events"]), 1)

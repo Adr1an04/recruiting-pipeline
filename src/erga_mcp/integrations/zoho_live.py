@@ -16,17 +16,23 @@ _MARKETING_MARKERS = ("free applications", "one tap", "one click", "jobbie")
 
 
 def _classify(message: MailMessageMetadata) -> tuple[str, float, bool]:
-    content = f"{message.sender}\n{message.subject}\n{message.preview}".casefold()
+    content = (
+        f"{message.sender}\n{message.subject}\n{message.preview}\n{message.content}".casefold()
+    )
     if any(marker in content for marker in _MARKETING_MARKERS):
         return "other", 0.0, False
-    application = classify_application_message(subject=message.subject, preview=message.preview)
+    application = classify_application_message(
+        subject=message.subject, preview=f"{message.preview}\n{message.content}"
+    )
     if application.kind != "unknown":
         return (
             f"application.{application.kind}",
             application.confidence,
             application.requires_review,
         )
-    content = f"{message.sender}\n{message.subject}\n{message.preview}".casefold()
+    content = (
+        f"{message.sender}\n{message.subject}\n{message.preview}\n{message.content}".casefold()
+    )
     if any(marker in content for marker in _JOB_MARKERS):
         return "job.candidate", 0.7, True
     return "other", 0.0, False
@@ -95,7 +101,12 @@ def format_recruiting_alerts(alerts: Sequence[dict[str, str | bool]]) -> str:
 
 
 def fetch_inbox_metadata(
-    *, access_token: str, limit: int = 20, folder: str = "Inbox", start: int = 0
+    *,
+    access_token: str,
+    limit: int = 20,
+    folder: str = "Inbox",
+    start: int = 0,
+    include_content: bool = False,
 ) -> list[MailMessageMetadata]:
     """Fetch read-only metadata from a named Zoho folder."""
 
@@ -147,13 +158,23 @@ def fetch_inbox_metadata(
         if not isinstance(item, dict):
             continue
         received_at = datetime.fromtimestamp(int(item["receivedTime"]) / 1000, UTC)
+        message_id = str(item["messageId"])
+        content = ""
+        if include_content:
+            content_response = get(
+                f"https://mail.zoho.com/api/accounts/{account_id}/folders/{folder_id}/messages/"
+                f"{message_id}/content"
+            ).get("data", {})
+            if isinstance(content_response, dict):
+                content = str(content_response.get("content", ""))
         result.append(
             MailMessageMetadata(
-                message_id=str(item["messageId"]),
+                message_id=message_id,
                 received_at=received_at,
                 sender=str(item.get("fromAddress", "")),
                 subject=str(item.get("subject", "")),
                 preview=str(item.get("summary", "")),
+                content=content,
             )
         )
     return result
@@ -165,6 +186,7 @@ def fetch_all_inbox_metadata(
     folder: str = "Inbox",
     page_size: int = 100,
     max_messages: int = 1000,
+    include_content: bool = False,
 ) -> list[MailMessageMetadata]:
     """Read a configured Zoho folder page by page, bounded by ``max_messages``."""
     if page_size < 1:
@@ -182,6 +204,7 @@ def fetch_all_inbox_metadata(
             folder=folder,
             limit=page_limit,
             start=start,
+            include_content=include_content,
         )
         result.extend(page)
         if len(page) < page_limit:

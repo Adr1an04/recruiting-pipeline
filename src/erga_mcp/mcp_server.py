@@ -856,6 +856,7 @@ def build_server(config_path: Path) -> FastMCP:
                 folder=config.mail_folder,
                 page_size=100,
                 max_messages=1000,
+                include_content=True,
             )
         sync_result = sync_metadata(store, messages)
         tracker_updates = 0
