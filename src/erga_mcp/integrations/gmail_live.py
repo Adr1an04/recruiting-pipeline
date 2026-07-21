@@ -125,3 +125,67 @@ def fetch_inbox_metadata_with_gws(
         )
         messages.append(parse_message_metadata(details))
     return messages
+
+
+def fetch_all_inbox_metadata_with_gws(
+    *,
+    gws_command: str = "gws",
+    page_size: int = 100,
+    max_messages: int = 1000,
+    run: Callable[[list[str]], dict[str, object]] | None = None,
+) -> list[MailMessageMetadata]:
+    """Read Gmail Inbox metadata page by page through a configured read-only GWS client."""
+    if page_size < 1 or page_size > 100:
+        raise ValueError("Gmail page size must be between 1 and 100")
+    if max_messages < 1:
+        raise ValueError("Gmail maximum message count must be positive")
+
+    def invoke(command: list[str]) -> dict[str, object]:
+        completed = subprocess.run(command, check=True, capture_output=True, text=True, timeout=30)
+        value = json.loads(completed.stdout)
+        if not isinstance(value, dict):
+            raise ValueError("gws returned non-object JSON")
+        return value
+
+    execute = run or invoke
+    prefix = [gws_command, "gmail", "users", "messages"]
+    messages: list[MailMessageMetadata] = []
+    page_token: str | None = None
+    while len(messages) < max_messages:
+        params: dict[str, object] = {
+            "userId": "me",
+            "labelIds": ["INBOX"],
+            "maxResults": min(page_size, max_messages - len(messages)),
+        }
+        if page_token is not None:
+            params["pageToken"] = page_token
+        listed = execute([*prefix, "list", "--params", json.dumps(params), "--format", "json"])
+        message_refs = listed.get("messages", [])
+        if not isinstance(message_refs, list):
+            raise ValueError("gws Gmail listing returned invalid data")
+        for item in message_refs:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                continue
+            details = execute(
+                [
+                    *prefix,
+                    "get",
+                    "--params",
+                    json.dumps(
+                        {
+                            "userId": "me",
+                            "id": item["id"],
+                            "format": "metadata",
+                            "metadataHeaders": ["From", "Subject"],
+                        }
+                    ),
+                    "--format",
+                    "json",
+                ]
+            )
+            messages.append(parse_message_metadata(details))
+        next_token = listed.get("nextPageToken")
+        if not isinstance(next_token, str) or not next_token or not message_refs:
+            break
+        page_token = next_token
+    return messages

@@ -49,6 +49,16 @@ _OFFER_MARKERS = (
     "pleased to offer",
     "extend an offer",
 )
+_NON_APPLICATION_MARKERS = (
+    "new roles available",
+    "new jobs available",
+    "job alert",
+    "recommended jobs",
+    "report domain",
+    "security alert",
+    "trial for",
+    "unsubscribe",
+)
 _ACKNOWLEDGEMENT_MARKERS = (
     "we received your application",
     "application received",
@@ -69,6 +79,8 @@ def classify_application_message(*, subject: str, preview: str) -> Classificatio
         return Classification(kind="interview", confidence=0.98, requires_review=True)
     if any(marker in content for marker in _ASSESSMENT_MARKERS):
         return Classification(kind="assessment", confidence=0.98, requires_review=True)
+    if any(marker in content for marker in _NON_APPLICATION_MARKERS):
+        return Classification(kind="unknown", confidence=0.0, requires_review=False)
     if any(marker in content for marker in _ACKNOWLEDGEMENT_MARKERS):
         return Classification(kind="acknowledgement", confidence=0.9, requires_review=False)
     return Classification(kind="unknown", confidence=0.0, requires_review=True)
