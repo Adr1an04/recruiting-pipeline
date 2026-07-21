@@ -80,12 +80,13 @@ class CronSetupTests(unittest.TestCase):
 
             completed = subprocess.run(
                 [sys.executable, str(scripts / "erga-mcp-mail.py")],
-                check=True,
+                check=False,
                 capture_output=True,
                 text=True,
                 timeout=10,
             )
 
+            self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
             self.assertIn("Interview invitation", completed.stdout)
             self.assertIn("Schedule your interview", completed.stdout)
 
