@@ -635,6 +635,33 @@ class HermesJobUrlRouterTests(unittest.TestCase):
                 [("mcp__erga_mcp__export_data", {})],
             )
 
+    def test_mail_sync_command_runs_the_configured_recruiting_mail_sync(self) -> None:
+        message = (
+            "📬 Erga mail sync complete\n\nFetched 1 message; 1 new recruiting event recorded."
+        )
+        context = _FakePluginContext(
+            result=json.dumps(
+                {
+                    "structuredContent": {
+                        "provider": "zoho",
+                        "fetched": 1,
+                        "created": 1,
+                        "message": message,
+                    }
+                }
+            )
+        )
+        self.router.register(context)
+
+        result = context.commands["erga-mail-sync"]("")
+
+        self.assertEqual(result, message)
+        self.assertEqual(context.calls, [("mcp__erga_mcp__sync_recruiting_mail", {})])
+        self.assertEqual(
+            context.commands["erga-mail-sync"]("now"),
+            "Usage: /erga-mail-sync",
+        )
+
     def test_tracker_command_returns_the_cross_platform_obsidian_card(self) -> None:
         message = (
             "### Erga application tracker\n\n"

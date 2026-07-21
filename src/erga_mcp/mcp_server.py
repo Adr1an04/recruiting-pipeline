@@ -21,7 +21,9 @@ from .cli import DEFAULT_CONFIG_PATH
 from .config import ErgaConfig, load_config
 from .cron_setup import install_hermes_monitor_scripts
 from .exporting import export_bundle
+from .integrations.gmail_live import fetch_inbox_metadata_with_gws
 from .integrations.obsidian_tracker import write_job_tracker_note
+from .integrations.zoho_live import fetch_inbox_metadata, sync_metadata
 from .job_intake import fetch_job_snapshot, select_relevant_evidence
 from .job_research import (
     JobResearch,
@@ -43,6 +45,7 @@ from .resume_tailoring import (
 )
 from .store import ErgaStore
 from .tracker_view import read_application_tracker, render_tracker_message
+from .zoho_oauth import refresh_access_token
 
 _READ_ONLY = ToolAnnotations(
     readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
@@ -828,6 +831,43 @@ def build_server(config_path: Path) -> FastMCP:
             cast(dict[str, object], _json_value(asdict(event)))
             for event in store.list_mail_events()
         ]
+
+    @server.tool(annotations=_NETWORK_READ_AND_WRITE)
+    def sync_recruiting_mail() -> dict[str, object]:
+        """Read bounded mail metadata, persist local events, and return a safe summary."""
+        limit = 50
+        if config.mail_provider == "gmail":
+            messages = fetch_inbox_metadata_with_gws(
+                gws_command=config.gws_command,
+                limit=limit,
+            )
+        else:
+            if not config.mail_client_id:
+                raise ValueError("mail client_id must be configured before Zoho sync")
+            messages = fetch_inbox_metadata(
+                access_token=refresh_access_token(
+                    client_id=config.mail_client_id,
+                    accounts_url=config.mail_accounts_url,
+                ),
+                limit=limit,
+                folder=config.mail_folder,
+            )
+        sync_result = sync_metadata(store, messages)
+        created = cast(int, sync_result["created"])
+        recruiting_events = cast(int, sync_result["application"]) + cast(int, sync_result["job"])
+        message = (
+            "📬 **Erga mail sync complete**\n\n"
+            f"{config.mail_provider.title()} {config.mail_folder} checked: "
+            f"{len(messages)} messages scanned · {created} new events · "
+            f"{recruiting_events} recruiting updates."
+        )
+        return {
+            "provider": config.mail_provider,
+            "fetched": len(messages),
+            "created": created,
+            "recruiting_events": recruiting_events,
+            "message": message,
+        }
 
     @server.tool(
         title="Intake a pasted job-posting URL",

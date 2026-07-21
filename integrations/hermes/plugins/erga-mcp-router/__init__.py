@@ -21,6 +21,7 @@ _DEFAULT_RESEARCH_TOOL_NAME = "mcp__erga_mcp__record_secondary_research"
 _DEFAULT_MONITOR_TOOL_NAME = "mcp__erga_mcp__install_mail_monitor_scripts"
 _DEFAULT_EXPORT_TOOL_NAME = "mcp__erga_mcp__export_data"
 _DEFAULT_TRACKER_TOOL_NAME = "mcp__erga_mcp__application_tracker"
+_DEFAULT_MAIL_SYNC_TOOL_NAME = "mcp__erga_mcp__sync_recruiting_mail"
 _DEFAULT_WEB_SEARCH_TOOL_NAME = "web_search"
 _DEFAULT_CRON_TOOL_NAME = "cronjob"
 _MONITOR_SETTINGS_NAME = "erga-mcp-monitor.json"
@@ -551,6 +552,7 @@ def register(
     monitor_tool = os.getenv("ERGA_MCP_MONITOR_TOOL", _DEFAULT_MONITOR_TOOL_NAME).strip()
     export_tool = os.getenv("ERGA_MCP_EXPORT_TOOL", _DEFAULT_EXPORT_TOOL_NAME).strip()
     tracker_tool = os.getenv("ERGA_MCP_TRACKER_TOOL", _DEFAULT_TRACKER_TOOL_NAME).strip()
+    mail_sync_tool = os.getenv("ERGA_MCP_MAIL_SYNC_TOOL", _DEFAULT_MAIL_SYNC_TOOL_NAME).strip()
     cron_tool = os.getenv("ERGA_MCP_CRON_TOOL", _DEFAULT_CRON_TOOL_NAME).strip()
     ready_timeout, retry_interval = _readiness_settings()
 
@@ -775,6 +777,31 @@ def register(
             return "Erga tracker failed: the tracker tool returned no display message."
         return str(payload["message"])
 
+    def mail_sync_command(raw_args: str) -> str:
+        if raw_args.strip():
+            return "Usage: /erga-mail-sync"
+        try:
+            synced = ctx.dispatch_tool(mail_sync_tool, {})
+        except Exception as exc:
+            return f"Erga mail sync failed: {exc}"
+        error_text = _dispatch_error_text(synced)
+        if error_text:
+            return f"Erga mail sync failed: {error_text}"
+        payload = next(
+            (
+                item
+                for item in _nested_objects(synced)
+                if isinstance(item.get("message"), str)
+                and isinstance(item.get("provider"), str)
+                and isinstance(item.get("fetched"), int)
+                and isinstance(item.get("created"), int)
+            ),
+            None,
+        )
+        if payload is None:
+            return "Erga mail sync failed: the mail-sync tool returned no display message."
+        return str(payload["message"])
+
     def export_command(raw_args: str) -> str:
         if raw_args.strip():
             return "Usage: /export-erga"
@@ -808,6 +835,13 @@ def register(
         "erga-tracker",
         handler=tracker_command,
         description="Show the local Obsidian application tracker in a compact message card.",
+    )
+    ctx.register_command(
+        "erga-mail-sync",
+        handler=mail_sync_command,
+        description=(
+            "Synchronize configured recruiting mail and summarize only metadata-safe results."
+        ),
     )
     ctx.register_command(
         "export-erga",

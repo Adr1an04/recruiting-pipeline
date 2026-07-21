@@ -81,6 +81,7 @@ class McpServerTests(unittest.TestCase):
                     "application_tracker",
                     "list_evidence",
                     "list_mail_events",
+                    "sync_recruiting_mail",
                     "intake_job_url",
                     "install_mail_monitor_scripts",
                     "export_data",
@@ -103,13 +104,17 @@ class McpServerTests(unittest.TestCase):
                 self.assertTrue(annotations.readOnlyHint)
                 self.assertFalse(annotations.openWorldHint)
             workspace_annotations = by_name["prepare_job_workspace"].annotations
+            mail_sync_annotations = by_name["sync_recruiting_mail"].annotations
             resume_annotations = by_name["create_tailored_resume"].annotations
             validation_annotations = by_name["validate_tailored_resume"].annotations
             assert workspace_annotations is not None
+            assert mail_sync_annotations is not None
             assert resume_annotations is not None
             assert validation_annotations is not None
             self.assertFalse(workspace_annotations.readOnlyHint)
             self.assertTrue(workspace_annotations.openWorldHint)
+            self.assertFalse(mail_sync_annotations.readOnlyHint)
+            self.assertTrue(mail_sync_annotations.openWorldHint)
             self.assertFalse(resume_annotations.readOnlyHint)
             self.assertFalse(validation_annotations.readOnlyHint)
 
