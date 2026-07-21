@@ -21,13 +21,17 @@ def project_recruiter_contacts(
             raise ValueError(f"unsupported contact output: {output.kind}")
         output.directory.mkdir(parents=True, exist_ok=True)
         for contact in contacts:
-            stem = _SAFE_FILENAME.sub("-", contact.name or contact.email).strip(" .-") or contact.id
-            path = output.directory / f"{stem}.md"
+            path = output.directory / _contact_filename(contact)
             body = _render_obsidian_contact(contact)
             existing = path.read_text(encoding="utf-8") if path.is_file() else ""
             path.write_text(_upsert_managed_block(existing, body), encoding="utf-8")
             written += 1
     return written
+
+
+def _contact_filename(contact: RecruiterContact) -> str:
+    stem = _SAFE_FILENAME.sub("-", contact.email).strip(" .-")
+    return f"{stem or contact.id}.md"
 
 
 def _upsert_managed_block(existing: str, body: str) -> str:
