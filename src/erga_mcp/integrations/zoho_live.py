@@ -58,10 +58,10 @@ def sync_metadata(
         created = store.record_mail_event(event)
         if not created:
             store.update_mail_event_classification(event)
+        category = kind.split(".", 1)[0]
+        counts[category] = int(counts[category]) + 1
         if created:
             counts["created"] = int(counts["created"]) + 1
-            category = kind.split(".", 1)[0]
-            counts[category] = int(counts[category]) + 1
             if category != "other":
                 alerts.append(
                     {
