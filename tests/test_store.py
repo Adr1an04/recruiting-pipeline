@@ -146,6 +146,33 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(contact.email, "jane.smith@company.test")
             self.assertEqual(store.list_recruiter_contacts(), [contact])
 
+            unnamed_event = MailEvent(
+                message_id="message-2",
+                received_at=datetime(2026, 7, 22, tzinfo=UTC),
+                sender="recruiter@company.test",
+                subject="New role",
+                kind="job.candidate",
+                confidence=0.7,
+                requires_review=True,
+            )
+            store.record_mail_event(unnamed_event)
+            unnamed_contact = record_recruiter_contact_from_mail(store, unnamed_event)
+            self.assertIsNotNone(unnamed_contact)
+            assert unnamed_contact is not None
+            self.assertIsNone(unnamed_contact.name)
+
+            automated_event = MailEvent(
+                message_id="message-3",
+                received_at=datetime(2026, 7, 23, tzinfo=UTC),
+                sender="recruitingnoreply@company.test",
+                subject="Application update",
+                kind="application.acknowledgement",
+                confidence=0.98,
+                requires_review=False,
+            )
+            store.record_mail_event(automated_event)
+            self.assertIsNone(record_recruiter_contact_from_mail(store, automated_event))
+
 
 if __name__ == "__main__":
     unittest.main()

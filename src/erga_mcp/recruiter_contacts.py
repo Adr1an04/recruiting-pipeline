@@ -5,7 +5,28 @@ from email.utils import parseaddr
 from .models import MailEvent, RecruiterContact
 from .store import ErgaStore
 
-_AUTOMATED_LOCAL_PARTS = frozenset({"no-reply", "noreply", "notifications", "jobs", "careers"})
+_AUTOMATED_LOCAL_PART_MARKERS = (
+    "noreply",
+    "no-reply",
+    "do_not_reply",
+    "donotreply",
+    "notification",
+    "recruiting",
+    "careers",
+    "jobs",
+    "talent",
+    "support",
+    "system",
+    "mailer-daemon",
+    "assessment",
+    "interview",
+    "verification",
+)
+
+
+def _is_automated_mailbox(local_part: str) -> bool:
+    normalized = local_part.casefold().replace("_", "-")
+    return any(marker in normalized for marker in _AUTOMATED_LOCAL_PART_MARKERS)
 
 
 def record_recruiter_contact_from_mail(
@@ -15,18 +36,16 @@ def record_recruiter_contact_from_mail(
 
     This deliberately ignores message bodies, generic mailboxes, and non-application mail.
     """
-    if not event.kind.startswith("application."):
+    if not (event.kind.startswith("application.") or event.kind == "job.candidate"):
         return None
     name, email = parseaddr(event.sender)
     normalized_email = email.strip().casefold()
     if "@" not in normalized_email:
         return None
     local_part = normalized_email.partition("@")[0]
-    if local_part in _AUTOMATED_LOCAL_PARTS:
+    if _is_automated_mailbox(local_part):
         return None
     normalized_name = " ".join(name.split()) or None
-    if normalized_name is None:
-        return None
     return store.upsert_recruiter_contact(
         email=normalized_email,
         name=normalized_name,
